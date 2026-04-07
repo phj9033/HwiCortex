@@ -13,6 +13,7 @@
 
 import { openDatabase, loadSqliteVec } from "./db.js";
 import type { Database } from "./db.js";
+import { tokenizeKorean } from "./korean.js";
 import { runMigrations, DEFAULT_MIGRATIONS } from "./migration/runner.js";
 import picomatch from "picomatch";
 import { createHash } from "crypto";
@@ -830,41 +831,23 @@ function initializeDatabase(db: Database): void {
     )
   `);
 
-  // Triggers to keep FTS in sync
-  db.exec(`
-    CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents
-    WHEN new.active = 1
-    BEGIN
-      INSERT INTO documents_fts(rowid, filepath, title, body)
-      SELECT
-        new.id,
-        new.collection || '/' || new.path,
-        new.title,
-        (SELECT doc FROM content WHERE hash = new.hash)
-      WHERE new.active = 1;
-    END
-  `);
+  // Drop old triggers that are replaced by app-level FTS insertion
+  db.exec(`DROP TRIGGER IF EXISTS documents_ai`);
+  db.exec(`DROP TRIGGER IF EXISTS documents_au`);
 
+  // Keep DELETE trigger — no preprocessing needed
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
       DELETE FROM documents_fts WHERE rowid = old.id;
     END
   `);
 
+  // Deactivation trigger — delete from FTS when document becomes inactive
   db.exec(`
-    CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents
+    CREATE TRIGGER IF NOT EXISTS documents_au_deactivate AFTER UPDATE ON documents
+    WHEN new.active = 0 AND old.active = 1
     BEGIN
-      -- Delete from FTS if no longer active
-      DELETE FROM documents_fts WHERE rowid = old.id AND new.active = 0;
-
-      -- Update FTS if still/newly active
-      INSERT OR REPLACE INTO documents_fts(rowid, filepath, title, body)
-      SELECT
-        new.id,
-        new.collection || '/' || new.path,
-        new.title,
-        (SELECT doc FROM content WHERE hash = new.hash)
-      WHERE new.active = 1;
+      DELETE FROM documents_fts WHERE rowid = old.id;
     END
   `);
 }
@@ -1152,6 +1135,8 @@ export type Store = {
   updateDocument: (documentId: number, title: string, hash: string, modifiedAt: string) => void;
   deactivateDocument: (collectionName: string, path: string) => void;
   getActiveDocumentPaths: (collectionName: string) => string[];
+  upsertFTS: (documentId: number, filepath: string, title: string, body: string) => Promise<void>;
+  getDocumentId: (collectionName: string, path: string) => number | null;
 
   // Vector/embedding operations
   getHashesForEmbedding: () => { hash: string; body: string; path: string }[];
@@ -1666,6 +1651,8 @@ export function createStore(dbPath?: string): Store {
     updateDocument: (documentId: number, title: string, hash: string, modifiedAt: string) => updateDocument(db, documentId, title, hash, modifiedAt),
     deactivateDocument: (collectionName: string, path: string) => deactivateDocument(db, collectionName, path),
     getActiveDocumentPaths: (collectionName: string) => getActiveDocumentPaths(db, collectionName),
+    upsertFTS: (documentId: number, filepath: string, title: string, body: string) => upsertFTS(db, documentId, filepath, title, body),
+    getDocumentId: (collectionName: string, path: string) => getDocumentId(db, collectionName, path),
 
     // Vector/embedding operations
     getHashesForEmbedding: () => getHashesForEmbedding(db),
@@ -2168,6 +2155,34 @@ export function updateDocument(
 export function deactivateDocument(db: Database, collectionName: string, path: string): void {
   db.prepare(`UPDATE documents SET active = 0 WHERE collection = ? AND path = ? AND active = 1`)
     .run(collectionName, path);
+}
+
+/**
+ * Insert or replace a document's FTS5 entry with Korean-preprocessed text.
+ * Called after insertDocument/updateDocument/updateDocumentTitle.
+ */
+export async function upsertFTS(
+  db: Database,
+  documentId: number,
+  filepath: string,
+  title: string,
+  body: string
+): Promise<void> {
+  const processedTitle = await tokenizeKorean(title);
+  const processedBody = await tokenizeKorean(body);
+  db.prepare(`
+    INSERT OR REPLACE INTO documents_fts(rowid, filepath, title, body)
+    VALUES (?, ?, ?, ?)
+  `).run(documentId, filepath, processedTitle, processedBody);
+}
+
+/**
+ * Get the document ID after an insertDocument upsert.
+ * Needed because ON CONFLICT DO UPDATE does not reliably return lastInsertRowid.
+ */
+export function getDocumentId(db: Database, collectionName: string, path: string): number | null {
+  const row = db.prepare(`SELECT id FROM documents WHERE collection = ? AND path = ? AND active = 1`).get(collectionName, path) as { id: number } | undefined;
+  return row?.id ?? null;
 }
 
 /**
