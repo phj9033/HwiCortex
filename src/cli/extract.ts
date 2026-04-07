@@ -26,6 +26,8 @@ import {
   hashContent,
   insertContent,
   createStore,
+  upsertFTS,
+  getDocumentId,
 } from "../store.js";
 import type { SessionParser, ParsedSession } from "../ingest/session-parser/types.js";
 
@@ -125,6 +127,8 @@ export async function processSession(
     source_type: "sessions",
     project: parsed.project,
   });
+  const sessionDocId = getDocumentId(db, "hwicortex", sessionDocPath);
+  if (sessionDocId) await upsertFTS(db, sessionDocId, "hwicortex/" + sessionDocPath, sessionId, markdown);
 
   // 3. Extract knowledge via LLM
   const extractor = new KnowledgeExtractor(llmProvider);
@@ -179,6 +183,8 @@ export async function processSession(
       tags: knowledge.tags,
     },
   );
+  const knowledgeDocId = getDocumentId(db, "hwicortex", knowledgePath);
+  if (knowledgeDocId) await upsertFTS(db, knowledgeDocId, "hwicortex/" + knowledgePath, knowledge.title, knowledgeContent);
 
   // 5. Update state
   stateManager.markProcessed(sessionId, now);

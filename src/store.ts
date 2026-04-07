@@ -1229,6 +1229,10 @@ export async function reindexCollection(
       if (existing.hash === hash) {
         if (existing.title !== title) {
           updateDocumentTitle(db, existing.id, title, now);
+          const existingContent = db.prepare(`SELECT doc FROM content WHERE hash = ?`).get(existing.hash) as { doc: string } | undefined;
+          if (existingContent) {
+            await upsertFTS(db, existing.id, collectionName + "/" + path, title, existingContent.doc);
+          }
           updated++;
         } else {
           unchanged++;
@@ -1238,6 +1242,7 @@ export async function reindexCollection(
         const stat = statSync(filepath);
         updateDocument(db, existing.id, title, hash,
           stat ? new Date(stat.mtime).toISOString() : now);
+        await upsertFTS(db, existing.id, collectionName + "/" + path, title, content);
         updated++;
       }
     } else {
@@ -1247,6 +1252,8 @@ export async function reindexCollection(
       insertDocument(db, collectionName, path, title, hash,
         stat ? new Date(stat.birthtime).toISOString() : now,
         stat ? new Date(stat.mtime).toISOString() : now);
+      const docId = getDocumentId(db, collectionName, path);
+      if (docId) await upsertFTS(db, docId, collectionName + "/" + path, title, content);
     }
 
     processed++;

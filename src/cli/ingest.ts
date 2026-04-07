@@ -19,6 +19,8 @@ import {
   hashContent,
   insertContent,
   createStore,
+  upsertFTS,
+  getDocumentId,
 } from "../store.js";
 
 export interface IngestOptions {
@@ -102,6 +104,8 @@ export async function handleIngest(options: IngestOptions): Promise<void> {
       insertDocument(db, collectionName, destPath, title, hash, now, now, {
         source_type: "docs",
       });
+      const docId = getDocumentId(db, collectionName, destPath);
+      if (docId) await upsertFTS(db, docId, collectionName + "/" + destPath, title, content);
 
       processed++;
       console.log(`  [OK] ${fileName}`);

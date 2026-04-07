@@ -23,6 +23,8 @@ import {
   insertContent,
   createStore,
   getDefaultDbPath,
+  upsertFTS,
+  getDocumentId,
 } from "../store.js";
 
 export interface RebuildOptions {
@@ -91,6 +93,8 @@ export async function handleRebuild(options: RebuildOptions): Promise<void> {
           source_type: sourceType,
           project,
         });
+        const docId = getDocumentId(db, collectionName, filePath);
+        if (docId) await upsertFTS(db, docId, collectionName + "/" + filePath, title, content);
         count++;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);

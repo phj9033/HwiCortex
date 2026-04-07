@@ -76,6 +76,8 @@ import {
   syncConfigToDb,
   type ReindexResult,
   type ChunkStrategy,
+  upsertFTS,
+  getDocumentId,
 } from "../store.js";
 import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, pullModels, DEFAULT_EMBED_MODEL_URI, DEFAULT_GENERATE_MODEL_URI, DEFAULT_RERANK_MODEL_URI, DEFAULT_MODEL_CACHE_DIR } from "../llm.js";
 import {
@@ -1579,6 +1581,10 @@ async function indexFiles(pwd?: string, globPattern: string = DEFAULT_GLOB, coll
         // Hash unchanged, but check if title needs updating
         if (existing.title !== title) {
           updateDocumentTitle(db, existing.id, title, now);
+          const existingContent = db.prepare(`SELECT doc FROM content WHERE hash = ?`).get(existing.hash) as { doc: string } | undefined;
+          if (existingContent) {
+            await upsertFTS(db, existing.id, collectionName + "/" + path, title, existingContent.doc);
+          }
           updated++;
         } else {
           unchanged++;
@@ -1589,6 +1595,7 @@ async function indexFiles(pwd?: string, globPattern: string = DEFAULT_GLOB, coll
         const stat = statSync(filepath);
         updateDocument(db, existing.id, title, hash,
           stat ? new Date(stat.mtime).toISOString() : now);
+        await upsertFTS(db, existing.id, collectionName + "/" + path, title, content);
         updated++;
       }
     } else {
@@ -1599,6 +1606,8 @@ async function indexFiles(pwd?: string, globPattern: string = DEFAULT_GLOB, coll
       insertDocument(db, collectionName, path, title, hash,
         stat ? new Date(stat.birthtime).toISOString() : now,
         stat ? new Date(stat.mtime).toISOString() : now);
+      const docId = getDocumentId(db, collectionName, path);
+      if (docId) await upsertFTS(db, docId, collectionName + "/" + path, title, content);
     }
 
     processed++;
