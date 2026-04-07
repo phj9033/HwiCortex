@@ -42,6 +42,8 @@
   `.toLowerCase()` call made indexed paths unreachable on case-sensitive
   filesystems (Linux). `hwicortex update` automatically migrates legacy
   lowercase paths without re-embedding. (upstream qmd #546 by junmo-kim)
+- GPU: respect explicit `QMD_LLAMA_GPU=metal|vulkan|cuda` backend overrides
+  instead of always using auto GPU selection. (upstream qmd #529)
 
 ## [2.1.0] - 2026-04-05
 
