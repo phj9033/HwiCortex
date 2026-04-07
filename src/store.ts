@@ -13,6 +13,7 @@
 
 import { openDatabase, loadSqliteVec } from "./db.js";
 import type { Database } from "./db.js";
+import { runMigrations, DEFAULT_MIGRATIONS } from "./migration/runner.js";
 import picomatch from "picomatch";
 import { createHash } from "crypto";
 import { readFileSync, realpathSync, statSync, mkdirSync } from "node:fs";
@@ -1587,6 +1588,7 @@ export function createStore(dbPath?: string): Store {
   const resolvedPath = dbPath || getDefaultDbPath();
   const db = openDatabase(resolvedPath);
   initializeDatabase(db);
+  runMigrations(db, resolvedPath, DEFAULT_MIGRATIONS);
 
   const store: Store = {
     db,
