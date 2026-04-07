@@ -130,4 +130,25 @@ export const DEFAULT_MIGRATIONS: Migration[] = [
       );
     },
   },
+  {
+    version: 2,
+    description: "Add type, parser, watch_dir columns to store_collections",
+    up(db: Database) {
+      // store_collections may not exist yet if DB was created before collections feature
+      const tableCheck = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='store_collections'"
+      ).get();
+      if (!tableCheck) return; // Table doesn't exist; columns will be in CREATE TABLE when it's created
+
+      if (!columnExists(db, "store_collections", "type")) {
+        db.exec("ALTER TABLE store_collections ADD COLUMN type TEXT DEFAULT 'static'");
+      }
+      if (!columnExists(db, "store_collections", "parser")) {
+        db.exec("ALTER TABLE store_collections ADD COLUMN parser TEXT");
+      }
+      if (!columnExists(db, "store_collections", "watch_dir")) {
+        db.exec("ALTER TABLE store_collections ADD COLUMN watch_dir TEXT");
+      }
+    },
+  },
 ];

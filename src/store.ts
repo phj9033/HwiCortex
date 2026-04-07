@@ -881,6 +881,9 @@ type StoreCollectionRow = {
   include_by_default: number;
   update_command: string | null;
   context: string | null;
+  type: string | null;
+  parser: string | null;
+  watch_dir: string | null;
 };
 
 function rowToNamedCollection(row: StoreCollectionRow): NamedCollection {
@@ -892,6 +895,9 @@ function rowToNamedCollection(row: StoreCollectionRow): NamedCollection {
     ...(row.include_by_default === 0 ? { includeByDefault: false } : {}),
     ...(row.update_command ? { update: row.update_command } : {}),
     ...(row.context ? { context: JSON.parse(row.context) as ContextMap } : {}),
+    ...(row.type && row.type !== 'static' ? { type: row.type as "static" | "dynamic" } : {}),
+    ...(row.parser ? { parser: row.parser } : {}),
+    ...(row.watch_dir ? { watchDir: row.watch_dir } : {}),
   };
 }
 
@@ -935,15 +941,18 @@ export function getStoreContexts(db: Database): Array<{ collection: string; path
 
 export function upsertStoreCollection(db: Database, name: string, collection: Omit<Collection, 'pattern'> & { pattern?: string }): void {
   db.prepare(`
-    INSERT INTO store_collections (name, path, pattern, ignore_patterns, include_by_default, update_command, context)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO store_collections (name, path, pattern, ignore_patterns, include_by_default, update_command, context, type, parser, watch_dir)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(name) DO UPDATE SET
       path = excluded.path,
       pattern = excluded.pattern,
       ignore_patterns = excluded.ignore_patterns,
       include_by_default = excluded.include_by_default,
       update_command = excluded.update_command,
-      context = excluded.context
+      context = excluded.context,
+      type = excluded.type,
+      parser = excluded.parser,
+      watch_dir = excluded.watch_dir
   `).run(
     name,
     collection.path,
@@ -952,6 +961,9 @@ export function upsertStoreCollection(db: Database, name: string, collection: Om
     collection.includeByDefault === false ? 0 : 1,
     collection.update || null,
     collection.context ? JSON.stringify(collection.context) : null,
+    collection.type || 'static',
+    collection.parser || null,
+    collection.watchDir || null,
   );
 }
 
