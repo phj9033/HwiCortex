@@ -157,6 +157,8 @@ export interface SearchOptions {
   collection?: string;
   /** Filter to specific collections */
   collections?: string[];
+  /** Filter by source type: "docs", "sessions", or "knowledge" */
+  sourceType?: string;
   /** Max results (default: 10) */
   limit?: number;
   /** Minimum score threshold */
@@ -396,6 +398,7 @@ export async function createStore(options: StoreOptions): Promise<QMDStore> {
         // Pre-expanded queries — use structuredSearch
         return structuredSearch(internal, opts.queries, {
           collections: collections.length > 0 ? collections : undefined,
+          sourceType: opts.sourceType,
           limit: opts.limit,
           minScore: opts.minScore,
           explain: opts.explain,
@@ -408,6 +411,7 @@ export async function createStore(options: StoreOptions): Promise<QMDStore> {
       // Simple query string — use hybridQuery (expand + search + rerank)
       return hybridQuery(internal, opts.query!, {
         collection: collections[0],
+        sourceType: opts.sourceType,
         limit: opts.limit,
         minScore: opts.minScore,
         explain: opts.explain,

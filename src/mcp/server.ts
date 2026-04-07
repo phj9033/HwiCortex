@@ -307,6 +307,7 @@ Intent-aware lex (C++ performance, not sports):
           "Maximum candidates to rerank (default: 40, lower = faster but may miss results)"
         ),
         collections: z.array(z.string()).optional().describe("Filter to collections (OR match)"),
+        source: z.string().optional().describe("Filter by source type: docs, sessions, or knowledge"),
         intent: z.string().optional().describe(
           "Background context to disambiguate the query. Example: query='performance', intent='web page load times and Core Web Vitals'. Does not search on its own."
         ),
@@ -315,7 +316,7 @@ Intent-aware lex (C++ performance, not sports):
         ),
       },
     },
-    async ({ searches, limit, minScore, candidateLimit, collections, intent, rerank }) => {
+    async ({ searches, limit, minScore, candidateLimit, collections, source, intent, rerank }) => {
       // Map to internal format
       const queries: ExpandedQuery[] = searches.map(s => ({
         type: s.type,
@@ -328,6 +329,7 @@ Intent-aware lex (C++ performance, not sports):
       const results = await store.search({
         queries,
         collections: effectiveCollections.length > 0 ? effectiveCollections : undefined,
+        sourceType: source,
         limit,
         minScore,
         rerank,
@@ -672,6 +674,7 @@ export async function startMcpHttpServer(port: number, options?: { quiet?: boole
         const results = await store.search({
           queries,
           collections: effectiveCollections.length > 0 ? effectiveCollections : undefined,
+          sourceType: params.source,
           limit: params.limit ?? 10,
           minScore: params.minScore ?? 0,
           intent: params.intent,
