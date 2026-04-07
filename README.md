@@ -256,9 +256,9 @@ vault/
 
 - **Gemini CLI 파서** (`ingest/session-parser/gemini.ts`): 파서 인터페이스 정의됨, 구현 필요
 - **LLM 작업별 라우팅**: 현재 전역 LLM 설정만 지원. 추출/요약/분류별 모델 분리 미구현
-- **한국어 형태소 분석기 통합**: BM25 검색 한국어 품질 개선
 - **PPTX/DOCX 지원**: 현재 마크다운과 PDF만 지원
-- **웹 UI**: CLI와 MCP만 존재, 웹 인터페이스 미구현
+- **웹 UI**: CLI와 MCP만 존재, 브라우저 기반 검색/탐색 인터페이스 미구현
+- **AST Symbol Extraction Phase 2** (`src/ast.ts`): 코드 청크에서 함수/클래스명 등 심볼 메타데이터 추출. 인터페이스(`SymbolInfo`)만 정의됨, 구현 시 코드 검색 정확도 개선
 
 ### 개발 환경 설정
 
