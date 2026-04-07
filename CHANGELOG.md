@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changes
+
+- Korean morphological analysis for BM25 search via mecab-ko. Korean text is
+  preprocessed into content morphemes (nouns, verbs, adjectives) at indexing
+  time, so searching "검색" matches "검색했다", "검색하는", etc. Requires
+  mecab-ko system package; graceful fallback to standard FTS5 tokenization
+  when not installed. Run `hwicortex rebuild` after installing mecab to
+  reindex existing documents.
+
 ## [2.1.0] - 2026-04-05
 
 Code files now chunk at function and class boundaries via tree-sitter,
