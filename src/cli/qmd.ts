@@ -76,9 +76,11 @@ import {
   syncConfigToDb,
   type ReindexResult,
   type ChunkStrategy,
+  getKoreanTokenizerState,
   upsertFTS,
   getDocumentId,
 } from "../store.js";
+import { isMecabAvailable } from "../korean.js";
 import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, pullModels, DEFAULT_EMBED_MODEL_URI, DEFAULT_GENERATE_MODEL_URI, DEFAULT_RERANK_MODEL_URI, DEFAULT_MODEL_CACHE_DIR } from "../llm.js";
 import {
   formatSearchResults,
@@ -410,6 +412,16 @@ async function showStatus(): Promise<void> {
   } catch {
     console.log(`\n${c.bold}AST Chunking${c.reset}`);
     console.log(`  Status:   ${c.dim}not available${c.reset}`);
+  }
+
+  // Korean tokenizer status
+  const koreanState = getKoreanTokenizerState(db);
+  const mecabNow = isMecabAvailable() ? "mecab" : "none";
+  console.log(`\n${c.bold}Korean Tokenizer${c.reset}`);
+  if (koreanState !== mecabNow) {
+    console.log(`  Status:   ${mecabNow} (index built with ${koreanState} — run \`hwicortex rebuild\` to update)`);
+  } else {
+    console.log(`  Status:   ${koreanState}`);
   }
 
   if (collections.length > 0) {

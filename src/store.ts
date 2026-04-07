@@ -13,7 +13,7 @@
 
 import { openDatabase, loadSqliteVec } from "./db.js";
 import type { Database } from "./db.js";
-import { tokenizeKorean } from "./korean.js";
+import { tokenizeKorean, isMecabAvailable } from "./korean.js";
 import { runMigrations, DEFAULT_MIGRATIONS } from "./migration/runner.js";
 import picomatch from "picomatch";
 import { createHash } from "crypto";
@@ -1137,6 +1137,8 @@ export type Store = {
   getActiveDocumentPaths: (collectionName: string) => string[];
   upsertFTS: (documentId: number, filepath: string, title: string, body: string) => Promise<void>;
   getDocumentId: (collectionName: string, path: string) => number | null;
+  getKoreanTokenizerState: () => string;
+  setKoreanTokenizerState: () => void;
 
   // Vector/embedding operations
   getHashesForEmbedding: () => { hash: string; body: string; path: string }[];
@@ -1271,6 +1273,8 @@ export async function reindexCollection(
   }
 
   const orphanedCleaned = cleanupOrphanedContent(db);
+
+  setKoreanTokenizerState(db);
 
   return { indexed, updated, unchanged, removed, orphanedCleaned };
 }
@@ -1660,6 +1664,8 @@ export function createStore(dbPath?: string): Store {
     getActiveDocumentPaths: (collectionName: string) => getActiveDocumentPaths(db, collectionName),
     upsertFTS: (documentId: number, filepath: string, title: string, body: string) => upsertFTS(db, documentId, filepath, title, body),
     getDocumentId: (collectionName: string, path: string) => getDocumentId(db, collectionName, path),
+    getKoreanTokenizerState: () => getKoreanTokenizerState(db),
+    setKoreanTokenizerState: () => setKoreanTokenizerState(db),
 
     // Vector/embedding operations
     getHashesForEmbedding: () => getHashesForEmbedding(db),
@@ -2190,6 +2196,16 @@ export async function upsertFTS(
 export function getDocumentId(db: Database, collectionName: string, path: string): number | null {
   const row = db.prepare(`SELECT id FROM documents WHERE collection = ? AND path = ? AND active = 1`).get(collectionName, path) as { id: number } | undefined;
   return row?.id ?? null;
+}
+
+export function getKoreanTokenizerState(db: Database): string {
+  const row = db.prepare(`SELECT value FROM store_config WHERE key = 'korean_tokenizer'`).get() as { value: string } | undefined;
+  return row?.value ?? "none";
+}
+
+export function setKoreanTokenizerState(db: Database): void {
+  const state = isMecabAvailable() ? "mecab" : "none";
+  db.prepare(`INSERT OR REPLACE INTO store_config (key, value) VALUES ('korean_tokenizer', ?)`).run(state);
 }
 
 /**

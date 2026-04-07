@@ -25,6 +25,7 @@ import {
   getDefaultDbPath,
   upsertFTS,
   getDocumentId,
+  setKoreanTokenizerState,
 } from "../store.js";
 
 export interface RebuildOptions {
@@ -116,6 +117,8 @@ export async function handleRebuild(options: RebuildOptions): Promise<void> {
 
   const knowledgeCount = await indexDir("knowledge", "knowledge");
   console.log(`  knowledge: ${knowledgeCount} file(s) indexed`);
+
+  setKoreanTokenizerState(db);
 
   store.close();
 
