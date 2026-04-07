@@ -1,0 +1,5 @@
+{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"Hello"},"uuid":"c001","timestamp":"2026-03-15T10:00:00.000Z","sessionId":"corrupt-session"}
+this is not valid json at all!!!
+{"parentUuid":"c001","isSidechain":false,"message":{"model":"claude-sonnet-4-20250514","id":"msg_test","type":"message","role":"assistant","content":[{"type":"text","text":"Hi there!"}],"stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":5}},"type":"assistant","uuid":"c002","timestamp":"2026-03-15T10:00:01.000Z","sessionId":"corrupt-session"}
+{broken json here
+{"parentUuid":"c002","isSidechain":false,"type":"user","message":{"role":"user","content":"Thanks"},"uuid":"c003","timestamp":"2026-03-15T10:00:02.000Z","sessionId":"corrupt-session"}
