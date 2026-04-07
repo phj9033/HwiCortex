@@ -8,6 +8,11 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { execSync } from "child_process";
 
+function mecabInstalled(): boolean {
+  try { execSync("which mecab", { stdio: "ignore" }); return true; }
+  catch { return false; }
+}
+
 describe("korean tokenizer", () => {
   describe("mecab detection", () => {
     test("detects mecab when available", async () => {
@@ -102,5 +107,49 @@ describe("mecab output parsing", () => {
       "EOS",
     ].join("\n");
     expect(parseMecabOutput(mecabOutput)).toBe("");
+  });
+});
+
+describe("tokenizeKorean (end-to-end)", () => {
+  const skipIfNoMecab = mecabInstalled() ? test : test.skip;
+
+  skipIfNoMecab("tokenizes Korean text into content morphemes", async () => {
+    const { tokenizeKorean, _resetState } = await import("../src/korean.js");
+    _resetState();
+    const result = await tokenizeKorean("검색했다");
+    expect(result).toContain("검색");
+    expect(result).not.toBe("검색했다");
+  });
+
+  skipIfNoMecab("passes through English text unchanged", async () => {
+    const { tokenizeKorean, _resetState } = await import("../src/korean.js");
+    _resetState();
+    const result = await tokenizeKorean("hello world");
+    expect(result).toBe("hello world");
+  });
+
+  skipIfNoMecab("handles mixed Korean/English text", async () => {
+    const { tokenizeKorean, _resetState } = await import("../src/korean.js");
+    _resetState();
+    const result = await tokenizeKorean("React컴포넌트를 검색했다");
+    expect(result).toContain("React");
+    expect(result).toContain("검색");
+    expect(result).not.toContain("를");
+  });
+
+  skipIfNoMecab("handles empty input", async () => {
+    const { tokenizeKorean, _resetState } = await import("../src/korean.js");
+    _resetState();
+    expect(await tokenizeKorean("")).toBe("");
+  });
+
+  skipIfNoMecab("reuses persistent process across calls", async () => {
+    const { tokenizeKorean, shutdownMecab, _resetState } = await import("../src/korean.js");
+    _resetState();
+    const r1 = await tokenizeKorean("검색");
+    const r2 = await tokenizeKorean("시작");
+    expect(r1).toContain("검색");
+    expect(r2).toContain("시작");
+    shutdownMecab();
   });
 });

@@ -6,7 +6,8 @@
  * When mecab is not installed, text passes through unchanged (fallback mode).
  */
 
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
+import type { ChildProcess } from "child_process";
 
 let mecabAvailable: boolean | null = null;
 let fallbackMode = false;
@@ -105,6 +106,70 @@ export function warnMecabMissing(): void {
   );
 }
 
+let mecabProcess: ChildProcess | null = null;
+const MECAB_TIMEOUT_MS = 5000;
+let exitHandlerRegistered = false;
+
+function getMecabProcess(): ChildProcess {
+  if (mecabProcess && !mecabProcess.killed) return mecabProcess;
+  mecabProcess = spawn("mecab", [], { stdio: ["pipe", "pipe", "pipe"] });
+  mecabProcess.on("exit", () => { mecabProcess = null; });
+  mecabProcess.on("error", () => { mecabProcess = null; });
+  if (!exitHandlerRegistered) {
+    process.on("exit", shutdownMecab);
+    exitHandlerRegistered = true;
+  }
+  return mecabProcess;
+}
+
+function runMecab(text: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = getMecabProcess();
+    if (!proc.stdout || !proc.stdin) {
+      reject(new Error("mecab process has no stdio"));
+      return;
+    }
+    let output = "";
+    let settled = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      proc.stdout!.off("data", onData);
+      proc.off("error", onError);
+      proc.off("close", onClose);
+    };
+
+    const onData = (chunk: Buffer) => {
+      output += chunk.toString();
+      if (output.includes("EOS\n")) {
+        settled = true; cleanup(); resolve(output);
+      }
+    };
+    const onError = (err: Error) => {
+      if (!settled) { settled = true; cleanup(); reject(err); }
+    };
+    const onClose = () => {
+      if (!settled) { settled = true; cleanup(); reject(new Error("mecab process exited unexpectedly")); }
+    };
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; cleanup(); shutdownMecab(); reject(new Error("mecab timed out")); }
+    }, MECAB_TIMEOUT_MS);
+
+    proc.stdout.on("data", onData);
+    proc.on("error", onError);
+    proc.on("close", onClose);
+    proc.stdin.write(text + "\n");
+  });
+}
+
+/** Kill the persistent mecab process. */
+export function shutdownMecab(): void {
+  if (mecabProcess && !mecabProcess.killed) {
+    mecabProcess.kill();
+    mecabProcess = null;
+  }
+}
+
 /**
  * Tokenize text for FTS5 indexing. Korean text is split into content morphemes
  * via mecab-ko. Non-Korean text passes through unchanged.
@@ -112,12 +177,31 @@ export function warnMecabMissing(): void {
  * In fallback mode (mecab not installed), returns input unchanged.
  */
 export async function tokenizeKorean(text: string): Promise<string> {
+  if (!text) return text;
   if (!isMecabAvailable()) {
     if (!fallbackMode) warnMecabMissing();
     return text;
   }
-  // Placeholder — implemented in Task 2
-  return text;
+  if (!containsKorean(text)) return text;
+
+  const segments = splitByScript(text);
+  const result: string[] = [];
+
+  for (const seg of segments) {
+    if (!seg.isKorean) {
+      result.push(seg.text);
+    } else {
+      try {
+        const mecabOutput = await runMecab(seg.text);
+        const parsed = parseMecabOutput(mecabOutput);
+        result.push(parsed || seg.text);
+      } catch {
+        result.push(seg.text);
+      }
+    }
+  }
+
+  return result.join("");
 }
 
 /** For testing only: force fallback mode on/off. */
@@ -129,6 +213,7 @@ export function _setFallbackMode(enabled: boolean): void {
 
 /** Reset cached state. For testing. */
 export function _resetState(): void {
+  shutdownMecab();
   mecabAvailable = null;
   fallbackMode = false;
   warnedOnce = false;
