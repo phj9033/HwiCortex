@@ -1,0 +1,5 @@
+# Missing required fields: vault.path and llm.default
+sessions:
+  watch_dirs:
+    - ~/.claude/projects
+  idle_timeout_minutes: 5

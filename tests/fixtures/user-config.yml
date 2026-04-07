@@ -1,0 +1,10 @@
+vault:
+  path: ~/my-custom-vault
+
+sessions:
+  idle_timeout_minutes: 30
+
+llm:
+  default: local
+  budget:
+    max_tokens_per_run: 200000
