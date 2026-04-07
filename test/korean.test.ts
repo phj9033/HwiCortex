@@ -31,3 +31,76 @@ describe("korean tokenizer", () => {
     });
   });
 });
+
+describe("Korean text detection", () => {
+  test("detects Korean characters", async () => {
+    const { containsKorean } = await import("../src/korean.js");
+    expect(containsKorean("검색")).toBe(true);
+    expect(containsKorean("hello")).toBe(false);
+    expect(containsKorean("React컴포넌트")).toBe(true);
+    expect(containsKorean("12345")).toBe(false);
+    expect(containsKorean("")).toBe(false);
+  });
+
+  test("splits text into Korean and non-Korean segments", async () => {
+    const { splitByScript } = await import("../src/korean.js");
+    const segments = splitByScript("React컴포넌트 검색");
+    expect(segments).toEqual([
+      { text: "React", isKorean: false },
+      { text: "컴포넌트", isKorean: true },
+      { text: " ", isKorean: false },
+      { text: "검색", isKorean: true },
+    ]);
+  });
+
+  test("handles pure English text", async () => {
+    const { splitByScript } = await import("../src/korean.js");
+    const segments = splitByScript("hello world");
+    expect(segments).toEqual([
+      { text: "hello world", isKorean: false },
+    ]);
+  });
+
+  test("handles pure Korean text", async () => {
+    const { splitByScript } = await import("../src/korean.js");
+    const segments = splitByScript("검색했다");
+    expect(segments).toEqual([
+      { text: "검색했다", isKorean: true },
+    ]);
+  });
+});
+
+describe("mecab output parsing", () => {
+  test("parses mecab output keeping content POS tags", async () => {
+    const { parseMecabOutput } = await import("../src/korean.js");
+    const mecabOutput = [
+      "검색\tNNG,*,T,검색,*,*,*,*",
+      "했\tXSV+EP,*,T,했,하/XSV/*+았/EP/*,*,*,*",
+      "다\tEF,*,F,다,*,*,*,*",
+      "EOS",
+    ].join("\n");
+    expect(parseMecabOutput(mecabOutput)).toBe("검색");
+  });
+
+  test("keeps nouns, verbs, adjectives, adverbs", async () => {
+    const { parseMecabOutput } = await import("../src/korean.js");
+    const mecabOutput = [
+      "빠른\tVA+ETM,*,T,빠른,빠르/VA/*+ㄴ/ETM/*,*,*,*",
+      "검색\tNNG,*,T,검색,*,*,*,*",
+      "을\tJKO,*,T,을,*,*,*,*",
+      "시작\tNNG,*,T,시작,*,*,*,*",
+      "합니다\tXSV+EF,*,F,합니다,하/XSV/*+ㅂ니다/EF/*,*,*,*",
+      "EOS",
+    ].join("\n");
+    expect(parseMecabOutput(mecabOutput)).toBe("빠른 검색 시작");
+  });
+
+  test("returns empty string for grammar-only input", async () => {
+    const { parseMecabOutput } = await import("../src/korean.js");
+    const mecabOutput = [
+      "을\tJKO,*,T,을,*,*,*,*",
+      "EOS",
+    ].join("\n");
+    expect(parseMecabOutput(mecabOutput)).toBe("");
+  });
+});
