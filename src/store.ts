@@ -1110,7 +1110,7 @@ export type Store = {
   toVirtualPath: (absolutePath: string) => string | null;
 
   // Search
-  searchFTS: (query: string, limit?: number, collectionName?: string, sourceType?: string) => SearchResult[];
+  searchFTS: (query: string, limit?: number, collectionName?: string, sourceType?: string) => Promise<SearchResult[]>;
   searchVec: (query: string, model: string, limit?: number, collectionName?: string, session?: ILLMSession, precomputedEmbedding?: number[], sourceType?: string) => Promise<SearchResult[]>;
 
   // Query expansion & reranking
@@ -2977,8 +2977,9 @@ export function validateLexQuery(query: string): string | null {
   return null;
 }
 
-export function searchFTS(db: Database, query: string, limit: number = 20, collectionName?: string, sourceType?: string): SearchResult[] {
-  const ftsQuery = buildFTS5Query(query);
+export async function searchFTS(db: Database, query: string, limit: number = 20, collectionName?: string, sourceType?: string): Promise<SearchResult[]> {
+  const processedQuery = await tokenizeKorean(query);
+  const ftsQuery = buildFTS5Query(processedQuery);
   if (!ftsQuery) return [];
 
   // Use a CTE to force FTS5 to run first, then filter by collection.
@@ -3994,7 +3995,7 @@ export async function hybridQuery(
   // match may not be what the caller wants (e.g. "performance" with intent
   // "web page load times" should NOT shortcut to a sports-performance doc).
   // Pass collection directly into FTS query (filter at SQL level, not post-hoc)
-  const initialFts = store.searchFTS(query, 20, collection, sourceType);
+  const initialFts = await store.searchFTS(query, 20, collection, sourceType);
   const topScore = initialFts[0]?.score ?? 0;
   const secondScore = initialFts[1]?.score ?? 0;
   const hasStrongSignal = !intent && initialFts.length > 0
@@ -4031,7 +4032,7 @@ export async function hybridQuery(
   // 3a: Run FTS for all lex expansions right away (no LLM needed)
   for (const q of expanded) {
     if (q.type === 'lex') {
-      const ftsResults = store.searchFTS(q.query, 20, collection, sourceType);
+      const ftsResults = await store.searchFTS(q.query, 20, collection, sourceType);
       if (ftsResults.length > 0) {
         for (const r of ftsResults) docidMap.set(r.filepath, r.docid);
         rankedLists.push(ftsResults.map(r => ({
@@ -4416,7 +4417,7 @@ export async function structuredSearch(
   for (const search of searches) {
     if (search.type === 'lex') {
       for (const coll of collectionList) {
-        const ftsResults = store.searchFTS(search.query, 20, coll, sourceType);
+        const ftsResults = await store.searchFTS(search.query, 20, coll, sourceType);
         if (ftsResults.length > 0) {
           for (const r of ftsResults) docidMap.set(r.filepath, r.docid);
           rankedLists.push(ftsResults.map(r => ({

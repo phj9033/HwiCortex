@@ -2212,7 +2212,7 @@ function parseStructuredQuery(query: string): ParsedStructuredQuery | null {
   return typed.length > 0 ? { searches: typed, intent } : null;
 }
 
-function search(query: string, opts: OutputOptions): void {
+async function search(query: string, opts: OutputOptions): Promise<void> {
   const db = getDb();
 
   // Validate collection filter (supports multiple -c flags)
@@ -2223,7 +2223,7 @@ function search(query: string, opts: OutputOptions): void {
   // Use large limit for --all, otherwise fetch more than needed and let outputResults filter
   const fetchLimit = opts.all ? 100000 : Math.max(50, opts.limit * 2);
   const results = filterByCollections(
-    searchFTS(db, query, fetchLimit, singleCollection, opts.sourceType),
+    await searchFTS(db, query, fetchLimit, singleCollection, opts.sourceType),
     collectionNames
   );
 
@@ -3143,7 +3143,7 @@ if (isMain) {
       if (cli.opts.searchMode === "hybrid") {
         await querySearch(cli.query, cli.opts);
       } else {
-        search(cli.query, cli.opts);
+        await search(cli.query, cli.opts);
       }
       break;
 
