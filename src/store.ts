@@ -1134,7 +1134,7 @@ export type Store = {
 
   // Document indexing operations
   insertContent: (hash: string, content: string, createdAt: string) => void;
-  insertDocument: (collectionName: string, path: string, title: string, hash: string, createdAt: string, modifiedAt: string) => void;
+  insertDocument: (collectionName: string, path: string, title: string, hash: string, createdAt: string, modifiedAt: string, meta?: DocumentMeta) => void;
   findActiveDocument: (collectionName: string, path: string) => { id: number; hash: string; title: string } | null;
   updateDocumentTitle: (documentId: number, title: string, modifiedAt: string) => void;
   updateDocument: (documentId: number, title: string, hash: string, modifiedAt: string) => void;
@@ -1648,7 +1648,7 @@ export function createStore(dbPath?: string): Store {
 
     // Document indexing operations
     insertContent: (hash: string, content: string, createdAt: string) => insertContent(db, hash, content, createdAt),
-    insertDocument: (collectionName: string, path: string, title: string, hash: string, createdAt: string, modifiedAt: string) => insertDocument(db, collectionName, path, title, hash, createdAt, modifiedAt),
+    insertDocument: (collectionName: string, path: string, title: string, hash: string, createdAt: string, modifiedAt: string, meta?: DocumentMeta) => insertDocument(db, collectionName, path, title, hash, createdAt, modifiedAt, meta),
     findActiveDocument: (collectionName: string, path: string) => findActiveDocument(db, collectionName, path),
     updateDocumentTitle: (documentId: number, title: string, modifiedAt: string) => updateDocumentTitle(db, documentId, title, modifiedAt),
     updateDocument: (documentId: number, title: string, hash: string, modifiedAt: string) => updateDocument(db, documentId, title, hash, modifiedAt),
@@ -1683,6 +1683,9 @@ export type DocumentResult = {
   modifiedAt: string;         // Last modification timestamp
   bodyLength: number;         // Body length in bytes (useful before loading)
   body?: string;              // Document body (optional, load with getDocumentBody)
+  sourceType?: string;        // Source type (e.g., 'docs', 'session', 'knowledge')
+  project?: string | null;    // Project name
+  tags?: string[];            // Tags array
 };
 
 /**
@@ -2070,6 +2073,12 @@ export function insertContent(db: Database, hash: string, content: string, creat
 /**
  * Insert a new document into the documents table.
  */
+export type DocumentMeta = {
+  source_type?: string;
+  project?: string;
+  tags?: string[];
+};
+
 export function insertDocument(
   db: Database,
   collectionName: string,
@@ -2077,17 +2086,25 @@ export function insertDocument(
   title: string,
   hash: string,
   createdAt: string,
-  modifiedAt: string
+  modifiedAt: string,
+  meta?: DocumentMeta
 ): void {
+  const sourceType = meta?.source_type ?? "docs";
+  const project = meta?.project ?? null;
+  const tags = meta?.tags ? JSON.stringify(meta.tags) : null;
+
   db.prepare(`
-    INSERT INTO documents (collection, path, title, hash, created_at, modified_at, active)
-    VALUES (?, ?, ?, ?, ?, ?, 1)
+    INSERT INTO documents (collection, path, title, hash, created_at, modified_at, active, source_type, project, tags)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
     ON CONFLICT(collection, path) DO UPDATE SET
       title = excluded.title,
       hash = excluded.hash,
       modified_at = excluded.modified_at,
-      active = 1
-  `).run(collectionName, path, title, hash, createdAt, modifiedAt);
+      active = 1,
+      source_type = excluded.source_type,
+      project = excluded.project,
+      tags = excluded.tags
+  `).run(collectionName, path, title, hash, createdAt, modifiedAt, sourceType, project, tags);
 }
 
 /**
