@@ -99,6 +99,10 @@ import {
   loadConfig,
 } from "../collections.js";
 import { getEmbeddedQmdSkillContent, getEmbeddedQmdSkillFiles } from "../embedded-skills.js";
+import { handleIngest } from "./ingest.js";
+import { handleExtract } from "./extract.js";
+import { handleWatch } from "./watch.js";
+import { handleRebuild } from "./rebuild.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -1789,6 +1793,8 @@ type OutputOptions = {
   intent?: string;       // Domain intent for disambiguation
   skipRerank?: boolean;  // Skip LLM reranking, use RRF scores only
   chunkStrategy?: ChunkStrategy;  // "auto" (default) or "regex"
+  sourceType?: string;   // Filter by source_type: docs|sessions|knowledge
+  searchMode?: string;   // bm25|hybrid (default hybrid)
 };
 
 // Highlight query terms in text (skip short words < 3 chars)
@@ -2208,7 +2214,7 @@ function search(query: string, opts: OutputOptions): void {
   // Use large limit for --all, otherwise fetch more than needed and let outputResults filter
   const fetchLimit = opts.all ? 100000 : Math.max(50, opts.limit * 2);
   const results = filterByCollections(
-    searchFTS(db, query, fetchLimit, singleCollection),
+    searchFTS(db, query, fetchLimit, singleCollection, opts.sourceType),
     collectionNames
   );
 
@@ -2487,6 +2493,12 @@ function parseCLI() {
       intent: { type: "string" },
       // Chunking options
       "chunk-strategy": { type: "string" },  // "regex" (default) or "auto" (AST for code files)
+      // HwiCortex options
+      source: { type: "string" },        // --source docs|sessions|knowledge
+      mode: { type: "string" },          // --mode bm25|hybrid
+      pattern: { type: "string" },       // --pattern (for ingest)
+      session: { type: "string" },       // --session (for extract)
+      "dry-run": { type: "boolean" },    // --dry-run (for extract)
       // MCP HTTP transport options
       http: { type: "boolean" },
       daemon: { type: "boolean" },
@@ -2529,6 +2541,8 @@ function parseCLI() {
     explain: !!values.explain,
     intent: values.intent as string | undefined,
     chunkStrategy: parseChunkStrategy(values["chunk-strategy"]),
+    sourceType: values.source as string | undefined,
+    searchMode: values.mode as string | undefined,
   };
 
   return {
@@ -3113,9 +3127,15 @@ if (isMain) {
     case "search":
       if (!cli.query) {
         console.error("Usage: qmd search [options] <query>");
+        console.error("  --source docs|sessions|knowledge  Filter by source type");
+        console.error("  --mode bm25|hybrid                Search mode (default: bm25 for search)");
         process.exit(1);
       }
-      search(cli.query, cli.opts);
+      if (cli.opts.searchMode === "hybrid") {
+        await querySearch(cli.query, cli.opts);
+      } else {
+        search(cli.query, cli.opts);
+      }
       break;
 
     case "vsearch":
@@ -3311,6 +3331,42 @@ if (isMain) {
       console.log(`${c.green}✓${c.reset} Database vacuumed`);
 
       closeDb();
+      break;
+    }
+
+    // =======================================================================
+    // HwiCortex commands
+    // =======================================================================
+
+    case "ingest": {
+      const ingestPath = cli.args[0];
+      if (!ingestPath) {
+        console.error("Usage: hwicortex ingest <path> [--name <name>] [--pattern <pattern>]");
+        process.exit(1);
+      }
+      await handleIngest({
+        path: ingestPath,
+        name: cli.values.name as string | undefined,
+        pattern: cli.values.pattern as string | undefined,
+      });
+      break;
+    }
+
+    case "extract": {
+      await handleExtract({
+        session: cli.values.session as string | undefined,
+        dryRun: !!cli.values["dry-run"],
+      });
+      break;
+    }
+
+    case "watch": {
+      await handleWatch({});
+      break;
+    }
+
+    case "rebuild": {
+      await handleRebuild({});
       break;
     }
 
