@@ -1,0 +1,22 @@
+vault:
+  path: ~/hwicortex-vault
+
+sessions:
+  watch_dirs:
+    - ~/.claude/projects
+    - ~/.codex/sessions
+  idle_timeout_minutes: 10
+
+llm:
+  default: claude
+  claude:
+    api_key: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-4-6
+  local:
+    model_path: ~/.hwicortex/models/default.gguf
+  budget:
+    max_tokens_per_run: 500000
+    warn_threshold: 100000
+
+ingest:
+  collections: []
