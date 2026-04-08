@@ -397,3 +397,55 @@ export function getLinks(
 
   return { related, backlinks };
 }
+
+// ============================================================================
+// Index Generation
+// ============================================================================
+
+/**
+ * Generate _index.md for a project, grouped by tags.
+ * Returns the file path of the generated index.
+ */
+export function generateIndex(vaultDir: string, project: string): string {
+  const pages = listWikiPages(vaultDir, { project });
+  const indexPath = join(vaultDir, "wiki", project, "_index.md");
+
+  // Group by tag
+  const tagGroups = new Map<string, WikiPageMeta[]>();
+  for (const page of pages) {
+    const tags = page.tags.length > 0 ? page.tags : ["uncategorized"];
+    for (const tag of tags) {
+      if (!tagGroups.has(tag)) tagGroups.set(tag, []);
+      tagGroups.get(tag)!.push(page);
+    }
+  }
+
+  // Sort tags alphabetically
+  const sortedTags = [...tagGroups.keys()].sort();
+
+  const lines: string[] = [
+    "---",
+    `title: ${project} 위키 인덱스`,
+    `generated: ${new Date().toISOString().slice(0, 10)}`,
+    "---",
+    "",
+    `# ${project}`,
+  ];
+
+  for (const tag of sortedTags) {
+    lines.push("", `## ${tag}`);
+    const tagPages = tagGroups.get(tag)!.sort((a, b) => a.title.localeCompare(b.title));
+    for (const page of tagPages) {
+      const content = readFileSync(page.filePath, "utf-8");
+      const { body } = parseFrontmatter(content);
+      const firstLine = body.trim().split("\n")[0]?.trim() || "";
+      const summary = firstLine.length > 60 ? firstLine.slice(0, 60) + "..." : firstLine;
+      const suffix = summary ? ` — ${summary}` : "";
+      lines.push(`- [[${page.title}]]${suffix}`);
+    }
+  }
+
+  lines.push("");
+  atomicWrite(indexPath, lines.join("\n"));
+  return indexPath;
+}

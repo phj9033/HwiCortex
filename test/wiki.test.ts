@@ -3,7 +3,7 @@ import { existsSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { atomicWrite } from "../src/knowledge/vault-writer.js";
-import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks } from "../src/wiki.js";
+import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex } from "../src/wiki.js";
 import { createStore, searchFTS, getDocumentId, findActiveDocument } from "../src/store.js";
 import type { Store } from "../src/store.js";
 
@@ -316,5 +316,42 @@ describe("Wiki linking", () => {
     expect(links.related).toContain("Ref");
     // Ref has [[Main]] in body AND in related section, should appear in backlinks
     expect(links.backlinks.length).toBeGreaterThanOrEqual(0); // may or may not find it depending on content structure
+  });
+});
+
+describe("Wiki index generation", () => {
+  let vaultDir: string;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-index-"));
+  });
+
+  afterEach(() => {
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  test("generates _index.md grouped by tags", async () => {
+    await createWikiPage(vaultDir, { title: "JWT 인증", project: "myapp", tags: ["auth"], body: "토큰 관리" });
+    await createWikiPage(vaultDir, { title: "배포 설정", project: "myapp", tags: ["infra"], body: "Docker 기반" });
+    await createWikiPage(vaultDir, { title: "OAuth", project: "myapp", tags: ["auth"], body: "Google 연동" });
+
+    const indexPath = generateIndex(vaultDir, "myapp");
+
+    expect(existsSync(indexPath)).toBe(true);
+    const content = readFileSync(indexPath, "utf-8");
+    expect(content).toContain("## auth");
+    expect(content).toContain("[[JWT 인증]]");
+    expect(content).toContain("[[OAuth]]");
+    expect(content).toContain("## infra");
+    expect(content).toContain("[[배포 설정]]");
+  });
+
+  test("pages with no tags go under 'uncategorized'", async () => {
+    await createWikiPage(vaultDir, { title: "No Tag", project: "p", body: "some content" });
+
+    const indexPath = generateIndex(vaultDir, "p");
+    const content = readFileSync(indexPath, "utf-8");
+    expect(content).toContain("## uncategorized");
+    expect(content).toContain("[[No Tag]]");
   });
 });

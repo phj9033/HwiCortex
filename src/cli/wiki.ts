@@ -1,7 +1,8 @@
 /**
  * CLI handler for `qmd wiki` subcommands.
  */
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, statSync, existsSync } from "fs";
+import { join } from "path";
 import {
   createWikiPage,
   getWikiPage,
@@ -11,6 +12,7 @@ import {
   linkPages,
   unlinkPages,
   getLinks,
+  generateIndex,
 } from "../wiki.js";
 import type { Store } from "../store.js";
 
@@ -32,7 +34,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
   const vaultDir = getVaultDir(flags);
 
   if (!subcommand) {
-    console.error("Usage: qmd wiki <create|update|rm|list|show|link|unlink|links> [options]");
+    console.error("Usage: qmd wiki <create|update|rm|list|show|link|unlink|links|index> [options]");
     console.error("");
     console.error("Commands:");
     console.error("  qmd wiki create <title> --project <name> [--tags t1,t2] [--body text]");
@@ -43,6 +45,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
     console.error("  qmd wiki link <titleA> <titleB> --project <name>");
     console.error("  qmd wiki unlink <titleA> <titleB> --project <name>");
     console.error("  qmd wiki links <title> --project <name>");
+    console.error("  qmd wiki index --project <name> | --all");
     process.exit(1);
   }
 
@@ -171,9 +174,29 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         break;
       }
 
+      case "index": {
+        const project = flags.project as string;
+        if (!project && !flags.all) {
+          console.error("Usage: qmd wiki index --project <name> or --all");
+          process.exit(1);
+        }
+        if (flags.all) {
+          const wikiDir = join(vaultDir, "wiki");
+          if (!existsSync(wikiDir)) { console.log("No wiki pages found."); break; }
+          for (const dir of readdirSync(wikiDir).filter(d => statSync(join(wikiDir, d)).isDirectory())) {
+            const path = generateIndex(vaultDir, dir);
+            console.log(`Generated: ${path}`);
+          }
+        } else {
+          const path = generateIndex(vaultDir, project);
+          console.log(`Generated: ${path}`);
+        }
+        break;
+      }
+
       default:
         console.error(`Unknown wiki subcommand: ${subcommand}`);
-        console.error("Available: create, update, rm, list, show, link, unlink, links");
+        console.error("Available: create, update, rm, list, show, link, unlink, links, index");
         process.exit(1);
     }
   } catch (err) {
