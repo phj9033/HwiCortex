@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { execSync } from "child_process";
-import { mkdtempSync, rmSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -55,5 +55,56 @@ describe("qmd wiki CLI", () => {
     qmd('wiki create "Del" --project p', vaultDir);
     qmd('wiki rm "Del" --project p', vaultDir);
     expect(() => qmd('wiki show "Del" --project p', vaultDir)).toThrow();
+  });
+});
+
+describe("qmd wiki end-to-end", () => {
+  let vaultDir: string;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-e2e-"));
+  });
+
+  afterEach(() => {
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  test("full workflow: create → update → link → index → show → rm", () => {
+    // Create two pages
+    qmd('wiki create "JWT 인증" --project demo --tags auth --body "토큰 관리"', vaultDir);
+    qmd('wiki create "세션 관리" --project demo --tags auth --body "세션 스토어"', vaultDir);
+
+    // Update
+    qmd('wiki update "JWT 인증" --project demo --append "리프레시 7일"', vaultDir);
+
+    // Link
+    qmd('wiki link "JWT 인증" "세션 관리" --project demo', vaultDir);
+
+    // Verify link
+    const links = qmd('wiki links "JWT 인증" --project demo', vaultDir);
+    expect(links).toContain("세션 관리");
+
+    // Show updated content
+    const content = qmd('wiki show "JWT 인증" --project demo', vaultDir);
+    expect(content).toContain("토큰 관리");
+    expect(content).toContain("리프레시 7일");
+
+    // Generate index
+    qmd("wiki index --project demo", vaultDir);
+    const indexPath = join(vaultDir, "wiki", "demo", "_index.md");
+    expect(existsSync(indexPath)).toBe(true);
+    const index = readFileSync(indexPath, "utf-8");
+    expect(index).toContain("[[JWT 인증]]");
+    expect(index).toContain("[[세션 관리]]");
+
+    // List
+    const list = qmd("wiki list --project demo", vaultDir);
+    expect(list).toContain("JWT 인증");
+    expect(list).toContain("세션 관리");
+
+    // Remove
+    qmd('wiki rm "세션 관리" --project demo', vaultDir);
+    const listAfter = qmd("wiki list --project demo", vaultDir);
+    expect(listAfter).not.toContain("세션 관리");
   });
 });
