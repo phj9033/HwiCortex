@@ -18,7 +18,7 @@ export function classify(input: ClassifyInput): ClassifyResult {
   return { folder, fileName, tags };
 }
 
-function toFileName(title?: string): string {
+export function toFileName(title?: string): string {
   if (!title) {
     return `${new Date().toISOString().replace(/[:.]/g, "")}.md`;
   }
