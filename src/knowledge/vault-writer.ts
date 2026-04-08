@@ -18,6 +18,13 @@ export interface KnowledgeEntry {
   sourceSession: string;
 }
 
+export function atomicWrite(filePath: string, content: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tmpPath = filePath + ".tmp";
+  writeFileSync(tmpPath, content, "utf-8");
+  renameSync(tmpPath, filePath);
+}
+
 export class VaultWriter {
   constructor(private vaultPath: string) {}
 
@@ -45,7 +52,7 @@ export class VaultWriter {
     content: string,
   ): Promise<void> {
     const filePath = join(this.vaultPath, "sessions", project, filename);
-    this.atomicWrite(filePath, content);
+    atomicWrite(filePath, content);
   }
 
   /** Append error entry to vault/docs/_errors.md */
@@ -81,7 +88,7 @@ ${k.summary}
 ${insightsLines}
 `;
 
-    this.atomicWrite(filePath, content);
+    atomicWrite(filePath, content);
   }
 
   private mergeKnowledge(filePath: string, k: KnowledgeEntry): void {
@@ -114,13 +121,6 @@ ${insightsLines}
 
     updated = updated.trimEnd() + "\n" + newInsights + "\n";
 
-    this.atomicWrite(filePath, updated);
-  }
-
-  private atomicWrite(filePath: string, content: string): void {
-    mkdirSync(dirname(filePath), { recursive: true });
-    const tmpPath = filePath + ".tmp";
-    writeFileSync(tmpPath, content, "utf-8");
-    renameSync(tmpPath, filePath);
+    atomicWrite(filePath, updated);
   }
 }
