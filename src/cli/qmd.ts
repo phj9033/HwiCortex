@@ -107,6 +107,7 @@ import { handleIngest } from "./ingest.js";
 import { handleExtract } from "./extract.js";
 import { handleWatch } from "./watch.js";
 import { handleRebuild } from "./rebuild.js";
+import { handleWiki } from "./wiki.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -2520,6 +2521,15 @@ function parseCLI() {
       pattern: { type: "string" },       // --pattern (for ingest)
       session: { type: "string" },       // --session (for extract)
       "dry-run": { type: "boolean" },    // --dry-run (for extract)
+      // Wiki options
+      project: { type: "string" },
+      tags: { type: "string" },
+      tag: { type: "string" },
+      body: { type: "string" },
+      append: { type: "string" },
+      stdin: { type: "boolean" },
+      "add-source": { type: "string" },
+      "vault-dir": { type: "string" },
       // MCP HTTP transport options
       http: { type: "boolean" },
       daemon: { type: "boolean" },
@@ -2722,6 +2732,13 @@ function showHelp(): void {
   console.log("  qmd collection add/list/remove/rename/show   - Manage indexed folders");
   console.log("  qmd context add/list/rm                      - Attach human-written summaries");
   console.log("  qmd ls [collection[/path]]                   - Inspect indexed files");
+  console.log("");
+  console.log("Wiki (knowledge vault):");
+  console.log("  qmd wiki create <title> --project <name> [--tags t1,t2] [--body text]");
+  console.log("  qmd wiki update <title> --project <name> [--append text] [--body text]");
+  console.log("  qmd wiki rm <title> --project <name>");
+  console.log("  qmd wiki list [--project <name>] [--tag <tag>]");
+  console.log("  qmd wiki show <title> --project <name> [--json]");
   console.log("");
   console.log("Maintenance:");
   console.log("  qmd status                    - View index + collection health");
@@ -3388,6 +3405,11 @@ if (isMain) {
 
     case "rebuild": {
       await handleRebuild({});
+      break;
+    }
+
+    case "wiki": {
+      await handleWiki(cli.args, cli.values);
       break;
     }
 
