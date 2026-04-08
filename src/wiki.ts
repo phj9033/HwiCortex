@@ -316,3 +316,84 @@ export function removeWikiPage(vaultDir: string, title: string, project: string,
     deindexWikiPage(store, project, `${slug}.md`);
   }
 }
+
+// ============================================================================
+// Linking
+// ============================================================================
+
+/**
+ * Sync the ## 관련 문서 section at end of file from frontmatter related:[].
+ * Replaces everything from last "## 관련 문서" heading to EOF.
+ */
+export function syncRelatedSection(filePath: string): void {
+  const content = readFileSync(filePath, "utf-8");
+  const { meta, body } = parseFrontmatter(content);
+
+  // Strip existing related section (last occurrence of ## 관련 문서 to EOF)
+  const sectionRegex = /\n## 관련 문서\n[\s\S]*$/;
+  const cleanBody = body.replace(sectionRegex, "").trimEnd();
+
+  let newContent = `${buildFrontmatter(meta)}\n${cleanBody}\n`;
+
+  if (meta.related.length > 0) {
+    const links = meta.related.map((r) => `- [[${r}]]`).join("\n");
+    newContent += `\n## 관련 문서\n${links}\n`;
+  }
+
+  atomicWrite(filePath, newContent);
+}
+
+export function linkPages(vaultDir: string, titleA: string, titleB: string, project: string): void {
+  // Update A's related
+  const pageA = getWikiPage(vaultDir, titleA, project);
+  if (!pageA.meta.related.includes(titleB)) {
+    pageA.meta.related.push(titleB);
+    pageA.meta.updated = new Date().toISOString().slice(0, 10);
+    const bodyA = pageA.body.replace(/\n## 관련 문서\n[\s\S]*$/, "").trimEnd();
+    atomicWrite(pageA.filePath, `${buildFrontmatter(pageA.meta)}\n${bodyA}\n`);
+    syncRelatedSection(pageA.filePath);
+  }
+
+  // Update B's related
+  const pageB = getWikiPage(vaultDir, titleB, project);
+  if (!pageB.meta.related.includes(titleA)) {
+    pageB.meta.related.push(titleA);
+    pageB.meta.updated = new Date().toISOString().slice(0, 10);
+    const bodyB = pageB.body.replace(/\n## 관련 문서\n[\s\S]*$/, "").trimEnd();
+    atomicWrite(pageB.filePath, `${buildFrontmatter(pageB.meta)}\n${bodyB}\n`);
+    syncRelatedSection(pageB.filePath);
+  }
+}
+
+export function unlinkPages(vaultDir: string, titleA: string, titleB: string, project: string): void {
+  for (const [title, target] of [[titleA, titleB], [titleB, titleA]] as const) {
+    const page = getWikiPage(vaultDir, title, project);
+    page.meta.related = page.meta.related.filter((r) => r !== target);
+    page.meta.updated = new Date().toISOString().slice(0, 10);
+    const body = page.body.replace(/\n## 관련 문서\n[\s\S]*$/, "").trimEnd();
+    atomicWrite(page.filePath, `${buildFrontmatter(page.meta)}\n${body}\n`);
+    syncRelatedSection(page.filePath);
+  }
+}
+
+export function getLinks(
+  vaultDir: string,
+  title: string,
+  project: string
+): { related: string[]; backlinks: string[] } {
+  const page = getWikiPage(vaultDir, title, project);
+  const related = page.meta.related;
+
+  // Compute backlinks: scan all wiki pages for [[title]] in body
+  const allPages = listWikiPages(vaultDir);
+  const pattern = `[[${title}]]`;
+  const backlinks = allPages
+    .filter((p) => p.title !== title)
+    .filter((p) => {
+      const content = readFileSync(p.filePath, "utf-8");
+      return content.includes(pattern);
+    })
+    .map((p) => p.title);
+
+  return { related, backlinks };
+}

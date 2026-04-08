@@ -8,6 +8,9 @@ import {
   listWikiPages,
   updateWikiPage,
   removeWikiPage,
+  linkPages,
+  unlinkPages,
+  getLinks,
 } from "../wiki.js";
 import type { Store } from "../store.js";
 
@@ -29,7 +32,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
   const vaultDir = getVaultDir(flags);
 
   if (!subcommand) {
-    console.error("Usage: qmd wiki <create|update|rm|list|show> [options]");
+    console.error("Usage: qmd wiki <create|update|rm|list|show|link|unlink|links> [options]");
     console.error("");
     console.error("Commands:");
     console.error("  qmd wiki create <title> --project <name> [--tags t1,t2] [--body text]");
@@ -37,6 +40,9 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
     console.error("  qmd wiki rm <title> --project <name>");
     console.error("  qmd wiki list [--project <name>] [--tag <tag>]");
     console.error("  qmd wiki show <title> --project <name> [--json]");
+    console.error("  qmd wiki link <titleA> <titleB> --project <name>");
+    console.error("  qmd wiki unlink <titleA> <titleB> --project <name>");
+    console.error("  qmd wiki links <title> --project <name>");
     process.exit(1);
   }
 
@@ -117,9 +123,57 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         break;
       }
 
+      case "link": {
+        const titleA = args[1];
+        const titleB = args[2];
+        const project = flags.project as string;
+        if (!titleA || !titleB || !project) {
+          console.error("Usage: qmd wiki link <titleA> <titleB> --project <name>");
+          process.exit(1);
+        }
+        linkPages(vaultDir, titleA, titleB, project);
+        console.log(`Linked: "${titleA}" ↔ "${titleB}"`);
+        break;
+      }
+
+      case "unlink": {
+        const titleA = args[1];
+        const titleB = args[2];
+        const project = flags.project as string;
+        if (!titleA || !titleB || !project) {
+          console.error("Usage: qmd wiki unlink <titleA> <titleB> --project <name>");
+          process.exit(1);
+        }
+        unlinkPages(vaultDir, titleA, titleB, project);
+        console.log(`Unlinked: "${titleA}" ↔ "${titleB}"`);
+        break;
+      }
+
+      case "links": {
+        const title = args[1];
+        const project = flags.project as string;
+        if (!title || !project) {
+          console.error("Usage: qmd wiki links <title> --project <name>");
+          process.exit(1);
+        }
+        const { related, backlinks } = getLinks(vaultDir, title, project);
+        if (related.length > 0) {
+          console.log("Related:");
+          related.forEach((r) => console.log(`  ${r}`));
+        }
+        if (backlinks.length > 0) {
+          console.log("Backlinks:");
+          backlinks.forEach((b) => console.log(`  ${b}`));
+        }
+        if (related.length === 0 && backlinks.length === 0) {
+          console.log("No links found.");
+        }
+        break;
+      }
+
       default:
         console.error(`Unknown wiki subcommand: ${subcommand}`);
-        console.error("Available: create, update, rm, list, show");
+        console.error("Available: create, update, rm, list, show, link, unlink, links");
         process.exit(1);
     }
   } catch (err) {
