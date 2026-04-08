@@ -38,6 +38,10 @@
 - Wiki CLI tests (`test/wiki-cli.test.ts`) now run with isolated `INDEX_PATH`
   and `QMD_CONFIG_DIR` so `ensureWikiCollection()` does not pollute the
   developer's `~/.cache/qmd/index.sqlite` during test runs.
+- Preserve original filename case in `handelize()`. The previous
+  `.toLowerCase()` call made indexed paths unreachable on case-sensitive
+  filesystems (Linux). `hwicortex update` automatically migrates legacy
+  lowercase paths without re-embedding. (upstream qmd #546 by junmo-kim)
 
 ## [2.1.0] - 2026-04-05
 
