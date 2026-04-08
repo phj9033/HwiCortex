@@ -9,6 +9,7 @@ import {
   updateWikiPage,
   removeWikiPage,
 } from "../wiki.js";
+import type { Store } from "../store.js";
 
 function getVaultDir(flags: Record<string, any>): string {
   const dir = (flags["vault-dir"] as string) || process.env.QMD_VAULT_DIR;
@@ -23,7 +24,7 @@ function readStdin(): string {
   return readFileSync(0, "utf-8").trim();
 }
 
-export async function handleWiki(args: string[], flags: Record<string, any>): Promise<void> {
+export async function handleWiki(args: string[], flags: Record<string, any>, store?: Store): Promise<void> {
   const subcommand = args[0];
   const vaultDir = getVaultDir(flags);
 
@@ -51,7 +52,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>): Pr
         let body = flags.body as string | undefined;
         if (flags.stdin) body = readStdin();
 
-        const filePath = createWikiPage(vaultDir, { title, project, tags, sources, body });
+        const filePath = await createWikiPage(vaultDir, { title, project, tags, sources, body, store });
         console.log(`Created: ${filePath}`);
         break;
       }
@@ -62,11 +63,12 @@ export async function handleWiki(args: string[], flags: Record<string, any>): Pr
         const project = flags.project as string;
         if (!project) { console.error("Error: --project is required"); process.exit(1); }
 
-        updateWikiPage(vaultDir, title, project, {
+        await updateWikiPage(vaultDir, title, project, {
           append: flags.append as string | undefined,
           body: flags.body as string | undefined,
           tags: flags.tags ? (flags.tags as string).split(",").map(t => t.trim()) : undefined,
           addSource: flags["add-source"] as string | undefined,
+          store,
         });
         console.log(`Updated: ${title}`);
         break;
@@ -79,7 +81,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>): Pr
         const project = flags.project as string;
         if (!project) { console.error("Error: --project is required"); process.exit(1); }
 
-        removeWikiPage(vaultDir, title, project);
+        removeWikiPage(vaultDir, title, project, store);
         console.log(`Removed: ${title}`);
         break;
       }

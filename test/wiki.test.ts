@@ -4,6 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { atomicWrite } from "../src/knowledge/vault-writer.js";
 import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage } from "../src/wiki.js";
+import { createStore, searchFTS, getDocumentId, findActiveDocument } from "../src/store.js";
+import type { Store } from "../src/store.js";
 
 describe("atomicWrite", () => {
   let testDir: string;
@@ -94,8 +96,8 @@ describe("Wiki CRUD", () => {
     if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
   });
 
-  test("createWikiPage writes file with frontmatter + body", () => {
-    const filePath = createWikiPage(vaultDir, {
+  test("createWikiPage writes file with frontmatter + body", async () => {
+    const filePath = await createWikiPage(vaultDir, {
       title: "JWT 인증",
       project: "myapp",
       tags: ["auth"],
@@ -108,23 +110,23 @@ describe("Wiki CRUD", () => {
     expect(content).toContain("토큰 만료 7일");
   });
 
-  test("createWikiPage errors on duplicate title", () => {
-    createWikiPage(vaultDir, { title: "Dup", project: "p" });
-    expect(() => createWikiPage(vaultDir, { title: "Dup", project: "p" }))
-      .toThrow(/already exists/);
+  test("createWikiPage errors on duplicate title", async () => {
+    await createWikiPage(vaultDir, { title: "Dup", project: "p" });
+    await expect(createWikiPage(vaultDir, { title: "Dup", project: "p" }))
+      .rejects.toThrow(/already exists/);
   });
 
-  test("getWikiPage returns meta and body", () => {
-    createWikiPage(vaultDir, { title: "Get Test", project: "p", body: "hello" });
+  test("getWikiPage returns meta and body", async () => {
+    await createWikiPage(vaultDir, { title: "Get Test", project: "p", body: "hello" });
     const page = getWikiPage(vaultDir, "Get Test", "p");
     expect(page.meta.title).toBe("Get Test");
     expect(page.body.trim()).toBe("hello");
   });
 
-  test("listWikiPages filters by project and tag", () => {
-    createWikiPage(vaultDir, { title: "A", project: "p1", tags: ["x"] });
-    createWikiPage(vaultDir, { title: "B", project: "p1", tags: ["y"] });
-    createWikiPage(vaultDir, { title: "C", project: "p2", tags: ["x"] });
+  test("listWikiPages filters by project and tag", async () => {
+    await createWikiPage(vaultDir, { title: "A", project: "p1", tags: ["x"] });
+    await createWikiPage(vaultDir, { title: "B", project: "p1", tags: ["y"] });
+    await createWikiPage(vaultDir, { title: "C", project: "p2", tags: ["x"] });
 
     expect(listWikiPages(vaultDir).length).toBe(3);
     expect(listWikiPages(vaultDir, { project: "p1" }).length).toBe(2);
@@ -132,40 +134,129 @@ describe("Wiki CRUD", () => {
     expect(listWikiPages(vaultDir, { project: "p1", tag: "x" }).length).toBe(1);
   });
 
-  test("updateWikiPage appends text", () => {
-    createWikiPage(vaultDir, { title: "Upd", project: "p", body: "line1" });
-    updateWikiPage(vaultDir, "Upd", "p", { append: "line2" });
+  test("updateWikiPage appends text", async () => {
+    await createWikiPage(vaultDir, { title: "Upd", project: "p", body: "line1" });
+    await updateWikiPage(vaultDir, "Upd", "p", { append: "line2" });
     const page = getWikiPage(vaultDir, "Upd", "p");
     expect(page.body).toContain("line1");
     expect(page.body).toContain("line2");
   });
 
-  test("updateWikiPage replaces body", () => {
-    createWikiPage(vaultDir, { title: "Rep", project: "p", body: "old" });
-    updateWikiPage(vaultDir, "Rep", "p", { body: "new" });
+  test("updateWikiPage replaces body", async () => {
+    await createWikiPage(vaultDir, { title: "Rep", project: "p", body: "old" });
+    await updateWikiPage(vaultDir, "Rep", "p", { body: "new" });
     const page = getWikiPage(vaultDir, "Rep", "p");
     expect(page.body.trim()).toBe("new");
     expect(page.body).not.toContain("old");
   });
 
-  test("updateWikiPage updates tags", () => {
-    createWikiPage(vaultDir, { title: "Tag", project: "p", tags: ["a"] });
-    updateWikiPage(vaultDir, "Tag", "p", { tags: ["a", "b", "c"] });
+  test("updateWikiPage updates tags", async () => {
+    await createWikiPage(vaultDir, { title: "Tag", project: "p", tags: ["a"] });
+    await updateWikiPage(vaultDir, "Tag", "p", { tags: ["a", "b", "c"] });
     const page = getWikiPage(vaultDir, "Tag", "p");
     expect(page.meta.tags).toEqual(["a", "b", "c"]);
   });
 
-  test("updateWikiPage adds source", () => {
-    createWikiPage(vaultDir, { title: "Src", project: "p", sources: ["s1"] });
-    updateWikiPage(vaultDir, "Src", "p", { addSource: "s2" });
+  test("updateWikiPage adds source", async () => {
+    await createWikiPage(vaultDir, { title: "Src", project: "p", sources: ["s1"] });
+    await updateWikiPage(vaultDir, "Src", "p", { addSource: "s2" });
     const page = getWikiPage(vaultDir, "Src", "p");
     expect(page.meta.sources).toEqual(["s1", "s2"]);
   });
 
-  test("removeWikiPage deletes file", () => {
-    const fp = createWikiPage(vaultDir, { title: "Del", project: "p" });
+  test("removeWikiPage deletes file", async () => {
+    const fp = await createWikiPage(vaultDir, { title: "Del", project: "p" });
     expect(existsSync(fp)).toBe(true);
     removeWikiPage(vaultDir, "Del", "p");
     expect(existsSync(fp)).toBe(false);
+  });
+});
+
+describe("Wiki FTS indexing", () => {
+  let vaultDir: string;
+  let store: Store;
+  let dbPath: string;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-fts-"));
+    dbPath = join(vaultDir, "test-index.sqlite");
+    store = createStore(dbPath);
+  });
+
+  afterEach(() => {
+    store.close();
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  test("createWikiPage with store indexes into FTS", async () => {
+    await createWikiPage(vaultDir, {
+      title: "JWT Authentication",
+      project: "myapp",
+      body: "Token expiration is set to seven days for security",
+      store,
+    });
+
+    // Verify document exists in DB
+    const docId = getDocumentId(store.db, "wiki", "myapp/jwt-authentication.md");
+    expect(docId).not.toBeNull();
+
+    // Verify FTS search finds the page
+    const results = await searchFTS(store.db, "token expiration security");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.filepath).toContain("wiki/myapp/jwt-authentication.md");
+  });
+
+  test("updateWikiPage with store re-indexes FTS", async () => {
+    await createWikiPage(vaultDir, {
+      title: "Update Test",
+      project: "proj",
+      body: "original content about databases",
+      store,
+    });
+
+    await updateWikiPage(vaultDir, "Update Test", "proj", {
+      body: "completely new content about kubernetes clusters",
+      store,
+    });
+
+    // Search for new content
+    const results = await searchFTS(store.db, "kubernetes clusters");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.filepath).toContain("wiki/proj/update-test.md");
+  });
+
+  test("removeWikiPage with store deactivates document", async () => {
+    await createWikiPage(vaultDir, {
+      title: "Remove Test",
+      project: "proj",
+      body: "content to be removed",
+      store,
+    });
+
+    // Verify active before removal
+    const before = findActiveDocument(store.db, "wiki", "proj/remove-test.md");
+    expect(before).not.toBeNull();
+
+    removeWikiPage(vaultDir, "Remove Test", "proj", store);
+
+    // Verify deactivated after removal
+    const after = findActiveDocument(store.db, "wiki", "proj/remove-test.md");
+    expect(after).toBeNull();
+  });
+
+  test("wiki collection is auto-registered in store_collections", async () => {
+    await createWikiPage(vaultDir, {
+      title: "Collection Test",
+      project: "proj",
+      body: "test",
+      store,
+    });
+
+    const row = store.db.prepare(
+      `SELECT name, pattern FROM store_collections WHERE name = 'wiki'`
+    ).get() as { name: string; pattern: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.name).toBe("wiki");
+    expect(row!.pattern).toBe("**/*.md");
   });
 });

@@ -3409,7 +3409,9 @@ if (isMain) {
     }
 
     case "wiki": {
-      await handleWiki(cli.args, cli.values);
+      let wikiStore: ReturnType<typeof createStore> | undefined;
+      try { wikiStore = getStore(); } catch { /* store unavailable, proceed without FTS */ }
+      await handleWiki(cli.args, cli.values, wikiStore);
       break;
     }
 

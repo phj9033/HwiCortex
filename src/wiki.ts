@@ -5,7 +5,10 @@
 import { toFileName } from "./knowledge/classifier.js";
 import { existsSync, readFileSync, unlinkSync, readdirSync, statSync } from "fs";
 import { join, basename } from "path";
+import { createHash } from "crypto";
 import { atomicWrite } from "./knowledge/vault-writer.js";
+import type { Store } from "./store.js";
+import { insertDocument, insertContent, getDocumentId, upsertFTS, deactivateDocument, upsertStoreCollection } from "./store.js";
 
 // ============================================================================
 // Slug generation
@@ -111,6 +114,67 @@ export function resolveWikiPath(vaultDir: string, title: string, project: string
 }
 
 // ============================================================================
+// FTS Indexing helpers
+// ============================================================================
+
+const WIKI_COLLECTION = "wiki";
+
+/**
+ * Ensure the "wiki" collection exists in the store_collections table.
+ * Uses upsertStoreCollection so it's safe to call repeatedly.
+ */
+export function ensureWikiCollection(store: Store, vaultDir: string): void {
+  upsertStoreCollection(store.db, WIKI_COLLECTION, {
+    path: join(vaultDir, "wiki"),
+    pattern: "**/*.md",
+    type: "static",
+  });
+}
+
+/**
+ * Compute a content hash (first 12 hex chars of SHA-256).
+ */
+function contentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 12);
+}
+
+/**
+ * Index a wiki page into the documents table and FTS5.
+ * Safe to call on both create and update (insertDocument does upsert).
+ */
+async function indexWikiPage(
+  store: Store,
+  project: string,
+  filename: string,
+  title: string,
+  content: string,
+): Promise<void> {
+  const db = store.db;
+  const now = new Date().toISOString();
+  const hash = contentHash(content);
+  const docPath = `${project}/${filename}`;
+
+  insertContent(db, hash, content, now);
+  insertDocument(db, WIKI_COLLECTION, docPath, title, hash, now, now, {
+    source_type: "wiki",
+    project,
+  });
+
+  const docId = getDocumentId(db, WIKI_COLLECTION, docPath);
+  if (docId) {
+    await upsertFTS(db, docId, `${WIKI_COLLECTION}/${docPath}`, title, content);
+  }
+}
+
+/**
+ * Deactivate a wiki page in the documents table (marks active=0).
+ */
+function deindexWikiPage(store: Store, project: string, filename: string): void {
+  const docPath = `${project}/${filename}`;
+  deactivateDocument(store.db, WIKI_COLLECTION, docPath);
+}
+
+// ============================================================================
 // CRUD
 // ============================================================================
 
@@ -120,9 +184,10 @@ export type CreateOpts = {
   tags?: string[];
   sources?: string[];
   body?: string;
+  store?: Store;
 };
 
-export function createWikiPage(vaultDir: string, opts: CreateOpts): string {
+export async function createWikiPage(vaultDir: string, opts: CreateOpts): Promise<string> {
   const filePath = resolveWikiPath(vaultDir, opts.title, opts.project);
 
   if (existsSync(filePath)) {
@@ -141,6 +206,13 @@ export function createWikiPage(vaultDir: string, opts: CreateOpts): string {
 
   const content = opts.body ? `${fm}\n\n${opts.body}\n` : `${fm}\n`;
   atomicWrite(filePath, content);
+
+  if (opts.store) {
+    ensureWikiCollection(opts.store, vaultDir);
+    const slug = toWikiSlug(opts.title);
+    await indexWikiPage(opts.store, opts.project, `${slug}.md`, opts.title, content);
+  }
+
   return filePath;
 }
 
@@ -196,14 +268,15 @@ export type UpdateOpts = {
   body?: string;
   tags?: string[];
   addSource?: string;
+  store?: Store;
 };
 
-export function updateWikiPage(
+export async function updateWikiPage(
   vaultDir: string,
   title: string,
   project: string,
   opts: UpdateOpts
-): void {
+): Promise<void> {
   const page = getWikiPage(vaultDir, title, project);
   const meta = { ...page.meta };
   let body = page.body;
@@ -221,13 +294,25 @@ export function updateWikiPage(
   }
 
   const fm = buildFrontmatter(meta);
-  atomicWrite(page.filePath, `${fm}\n${body}`);
+  const content = `${fm}\n${body}`;
+  atomicWrite(page.filePath, content);
+
+  if (opts.store) {
+    ensureWikiCollection(opts.store, vaultDir);
+    const slug = toWikiSlug(title);
+    await indexWikiPage(opts.store, project, `${slug}.md`, title, content);
+  }
 }
 
-export function removeWikiPage(vaultDir: string, title: string, project: string): void {
+export function removeWikiPage(vaultDir: string, title: string, project: string, store?: Store): void {
   const filePath = resolveWikiPath(vaultDir, title, project);
   if (!existsSync(filePath)) {
     throw new Error(`Wiki page "${title}" not found at ${filePath}`);
   }
   unlinkSync(filePath);
+
+  if (store) {
+    const slug = toWikiSlug(title);
+    deindexWikiPage(store, project, `${slug}.md`);
+  }
 }
