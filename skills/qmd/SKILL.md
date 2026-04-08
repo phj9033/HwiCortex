@@ -142,3 +142,32 @@ npm install -g @tobilu/qmd
 qmd collection add ~/notes --name notes
 qmd embed
 ```
+
+## Wiki Management
+
+```bash
+# Create a wiki page
+qmd wiki create "Title" --project <name> --tags tag1,tag2 --body "content"
+echo "long content" | qmd wiki create "Title" --project <name> --stdin
+
+# Update a wiki page
+qmd wiki update "Title" --project <name> --append "additional content"
+qmd wiki update "Title" --project <name> --body "replace content"
+qmd wiki update "Title" --project <name> --tags newtag1,newtag2
+
+# Link/unlink pages
+qmd wiki link "Page A" "Page B" --project <name>
+qmd wiki unlink "Page A" "Page B" --project <name>
+qmd wiki links "Page A" --project <name>
+
+# List and show
+qmd wiki list [--project <name>] [--tag <tag>]
+qmd wiki show "Title" --project <name> [--json]
+
+# Remove
+qmd wiki rm "Title" --project <name>
+
+# Generate index
+qmd wiki index --project <name>
+qmd wiki index --all
+```

@@ -164,3 +164,32 @@ Key points:
 - The release script renames `[Unreleased]` → `[X.Y.Z] - date` at release time
 - Credit external PRs with `#NNN (thanks @username)`
 - GitHub releases roll up the full minor series (e.g. 1.2.0 through 1.2.3)
+
+## Wiki
+
+Wiki pages are stored in `vault/wiki/{project}/` as Obsidian-compatible markdown.
+
+### Commands
+
+```sh
+qmd wiki create "Title" --project <name> --tags t1,t2 --body "content"
+qmd wiki update "Title" --project <name> --append "more content"
+qmd wiki link "A" "B" --project <name>
+qmd wiki list [--project <name>] [--tag <tag>]
+qmd wiki show "Title" --project <name>
+qmd wiki rm "Title" --project <name>
+qmd wiki index --project <name>
+```
+
+### Wiki Suggestion Guidelines
+
+Suggest saving to wiki when:
+- A bug cause and solution are confirmed
+- An architecture decision is made
+- A reusable configuration or procedure is documented
+- The user says "정리해줘", "기록해줘", or similar
+
+Suggestion format:
+> This looks worth recording in the wiki. Want to save it with `/wiki-save`?
+
+Never auto-execute. Always wait for user approval.
