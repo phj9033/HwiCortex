@@ -3422,8 +3422,22 @@ if (isMain) {
   }
 
   if (cli.command !== "mcp") {
-    await disposeDefaultLlamaCpp();
-    process.exit(0);
+    // Bun v1.2.x has a NAPI finalizer bug: native modules (node-llama-cpp,
+    // better-sqlite3, sqlite-vec) crash with "non-GC-safe function inside a
+    // NAPI finalizer" during dispose or process.exit() GC sweep.
+    // Workaround: close DB safely, then exit via native syscall to bypass
+    // Bun's GC entirely.  All output is already flushed and the SQLite WAL
+    // is auto-checkpointed, so no data is lost.
+    closeDb();
+    // Bun exposes native dlsym; use _exit(2) syscall to skip atexit handlers and GC.
+    // Falls back to SIGKILL if unavailable (shows "killed" in terminal but is safe).
+    try {
+      const { dlopen, ptr, suffix } = require("bun:ffi") as any;
+      const lib = dlopen(`libc.${suffix}`, { _exit: { args: ["i32"], returns: "void" } });
+      lib.symbols._exit(0);
+    } catch {
+      process.kill(process.pid, "SIGKILL");
+    }
   }
 
 } // end if (main module)
