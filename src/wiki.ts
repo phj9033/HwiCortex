@@ -192,7 +192,7 @@ export async function createWikiPage(vaultDir: string, opts: CreateOpts): Promis
 
   if (existsSync(filePath)) {
     throw new Error(
-      `Wiki page "${opts.title}" already exists at ${filePath}. Use 'qmd wiki update' instead.`
+      `Wiki page "${opts.title}" already exists at ${filePath}. Use 'hwicortex wiki update' instead.`
     );
   }
 

@@ -1,4 +1,4 @@
-import type { SessionParser, ParsedSession } from "./types";
+import type { SessionParser, ParsedSession } from "./types.js";
 
 export class GeminiSessionParser implements SessionParser {
   readonly name = "gemini-cli";

@@ -61,7 +61,7 @@ export class SessionWatcher extends EventEmitter {
       watcher.on("change", (filePath: string) =>
         this.handleFileEvent(filePath),
       );
-      watcher.on("error", (error: Error) => this.emit("error", error));
+      watcher.on("error", (error: unknown) => this.emit("error", error));
 
       this.watchers.push(watcher);
     }

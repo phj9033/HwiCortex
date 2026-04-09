@@ -5,7 +5,7 @@
  * LLM provider for structured extraction, and handles chunking for large sessions.
  */
 
-import { LlmProvider } from "./llm-provider";
+import type { LlmProvider } from "./llm-provider.js";
 
 // =============================================================================
 // Types
@@ -126,7 +126,7 @@ export class KnowledgeExtractor {
     // Remove markdown code fences if present
     const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (fenceMatch) {
-      jsonStr = fenceMatch[1].trim();
+      jsonStr = fenceMatch[1]!.trim();
     }
 
     let parsed: unknown;
@@ -171,10 +171,10 @@ export class KnowledgeExtractor {
     }
 
     if (results.length === 1) {
-      return results[0];
+      return results[0]!;
     }
 
-    const title = results[0].title;
+    const title = results[0]!.title;
     const summary = results.map((r) => r.summary).join(" ");
     const keyInsights = dedupe(results.flatMap((r) => r.keyInsights));
     const tags = dedupe(results.flatMap((r) => r.tags));

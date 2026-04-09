@@ -34,7 +34,7 @@ export function loadConfig(
 
   validate(merged);
 
-  return merged as HwiCortexConfig;
+  return merged as unknown as HwiCortexConfig;
 }
 
 function loadAndParse(filePath: string): Record<string, unknown> {

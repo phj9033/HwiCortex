@@ -128,10 +128,10 @@ async function buildInstructions(store: QMDStore): Promise<string> {
   // --- Capability gaps ---
   if (!status.hasVectorIndex) {
     lines.push("");
-    lines.push("Note: No vector embeddings yet. Run `qmd embed` to enable semantic search (vec/hyde).");
+    lines.push("Note: No vector embeddings yet. Run `hwicortex embed` to enable semantic search (vec/hyde).");
   } else if (status.needsEmbedding > 0) {
     lines.push("");
-    lines.push(`Note: ${status.needsEmbedding} documents need embedding. Run \`qmd embed\` to update.`);
+    lines.push(`Note: ${status.needsEmbedding} documents need embedding. Run \`hwicortex embed\` to update.`);
   }
 
   // --- Search tool ---

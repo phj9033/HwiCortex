@@ -1,6 +1,6 @@
 import { readFile } from "fs/promises";
 import path from "path";
-import type { SessionParser, ParsedSession, ParsedMessage } from "./types";
+import type { SessionParser, ParsedSession, ParsedMessage } from "./types.js";
 
 interface CodexEntry {
   timestamp?: string;
@@ -77,7 +77,7 @@ export class CodexSessionParser implements SessionParser {
     for (let i = 0; i < lines.length; i++) {
       let parsed: unknown;
       try {
-        parsed = JSON.parse(lines[i]);
+        parsed = JSON.parse(lines[i]!);
       } catch {
         errors.push(`Line ${i + 1}: invalid JSON`);
         continue;

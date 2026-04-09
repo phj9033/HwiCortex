@@ -1057,7 +1057,7 @@ function ensureVecTableInternal(db: Database, dimensions: number): void {
     if (existingDims !== null && existingDims !== dimensions) {
       throw new Error(
         `Embedding dimension mismatch: existing vectors are ${existingDims}d but the current model produces ${dimensions}d. ` +
-        `Run 'qmd embed -f' to re-embed with the new model.`
+        `Run 'hwicortex embed -f' to re-embed with the new model.`
       );
     }
     db.exec("DROP TABLE IF EXISTS vectors_vec");

@@ -1,4 +1,4 @@
-import type { ParsedSession } from "./session-parser/types";
+import type { ParsedSession } from "./session-parser/types.js";
 
 export function sessionToMarkdown(session: ParsedSession): string {
   const lines: string[] = [];

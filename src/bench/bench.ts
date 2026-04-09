@@ -5,7 +5,7 @@
  * and measures precision@k, recall, MRR, F1, and latency.
  *
  * Usage:
- *   qmd bench <fixture.json> [--json] [--collection <name>]
+ *   hwicortex bench <fixture.json> [--json] [--collection <name>]
  *
  * Backends tested:
  *   - bm25: BM25 keyword search (searchLex)

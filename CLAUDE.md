@@ -5,77 +5,77 @@ Use Bun instead of Node.js (`bun` not `node`, `bun install` not `npm install`).
 ## Commands
 
 ```sh
-qmd collection add . --name <n>   # Create/index collection
-qmd collection list               # List all collections with details
-qmd collection remove <name>      # Remove a collection by name
-qmd collection rename <old> <new> # Rename a collection
-qmd ls [collection[/path]]        # List collections or files in a collection
-qmd context add [path] "text"     # Add context for path (defaults to current dir)
-qmd context list                  # List all contexts
-qmd context check                 # Check for collections/paths missing context
-qmd context rm <path>             # Remove context
-qmd get <file>                    # Get document by path or docid (#abc123)
-qmd multi-get <pattern>           # Get multiple docs by glob or comma-separated list
-qmd status                        # Show index status and collections
-qmd update [--pull]               # Re-index all collections (--pull: git pull first)
-qmd embed                         # Generate vector embeddings (uses node-llama-cpp)
-qmd query <query>                 # Search with query expansion + reranking (recommended)
-qmd search <query>                # Full-text keyword search (BM25, no LLM)
-qmd vsearch <query>               # Vector similarity search (no reranking)
-qmd mcp                           # Start MCP server (stdio transport)
-qmd mcp --http [--port N]         # Start MCP server (HTTP, default port 8181)
-qmd mcp --http --daemon           # Start as background daemon
-qmd mcp stop                      # Stop background MCP daemon
+hwicortex collection add . --name <n>   # Create/index collection
+hwicortex collection list               # List all collections with details
+hwicortex collection remove <name>      # Remove a collection by name
+hwicortex collection rename <old> <new> # Rename a collection
+hwicortex ls [collection[/path]]        # List collections or files in a collection
+hwicortex context add [path] "text"     # Add context for path (defaults to current dir)
+hwicortex context list                  # List all contexts
+hwicortex context check                 # Check for collections/paths missing context
+hwicortex context rm <path>             # Remove context
+hwicortex get <file>                    # Get document by path or docid (#abc123)
+hwicortex multi-get <pattern>           # Get multiple docs by glob or comma-separated list
+hwicortex status                        # Show index status and collections
+hwicortex update [--pull]               # Re-index all collections (--pull: git pull first)
+hwicortex embed                         # Generate vector embeddings (uses node-llama-cpp)
+hwicortex query <query>                 # Search with query expansion + reranking (recommended)
+hwicortex search <query>                # Full-text keyword search (BM25, no LLM)
+hwicortex vsearch <query>               # Vector similarity search (no reranking)
+hwicortex mcp                           # Start MCP server (stdio transport)
+hwicortex mcp --http [--port N]         # Start MCP server (HTTP, default port 8181)
+hwicortex mcp --http --daemon           # Start as background daemon
+hwicortex mcp stop                      # Stop background MCP daemon
 ```
 
 ## Collection Management
 
 ```sh
 # List all collections
-qmd collection list
+hwicortex collection list
 
 # Create a collection with explicit name
-qmd collection add ~/Documents/notes --name mynotes --mask '**/*.md'
+hwicortex collection add ~/Documents/notes --name mynotes --mask '**/*.md'
 
 # Remove a collection
-qmd collection remove mynotes
+hwicortex collection remove mynotes
 
 # Rename a collection
-qmd collection rename mynotes my-notes
+hwicortex collection rename mynotes my-notes
 
 # List all files in a collection
-qmd ls mynotes
+hwicortex ls mynotes
 
 # List files with a path prefix
-qmd ls journals/2025
-qmd ls qmd://journals/2025
+hwicortex ls journals/2025
+hwicortex ls qmd://journals/2025
 ```
 
 ## Context Management
 
 ```sh
 # Add context to current directory (auto-detects collection)
-qmd context add "Description of these files"
+hwicortex context add "Description of these files"
 
 # Add context to a specific path
-qmd context add /subfolder "Description for subfolder"
+hwicortex context add /subfolder "Description for subfolder"
 
 # Add global context to all collections (system message)
-qmd context add / "Always include this context"
+hwicortex context add / "Always include this context"
 
 # Add context using virtual paths
-qmd context add qmd://journals/ "Context for entire journals collection"
-qmd context add qmd://journals/2024 "Journal entries from 2024"
+hwicortex context add qmd://journals/ "Context for entire journals collection"
+hwicortex context add qmd://journals/2024 "Journal entries from 2024"
 
 # List all contexts
-qmd context list
+hwicortex context list
 
 # Check for collections or paths without context
-qmd context check
+hwicortex context check
 
 # Remove context
-qmd context rm qmd://journals/2024
-qmd context rm /  # Remove global context
+hwicortex context rm qmd://journals/2024
+hwicortex context rm /  # Remove global context
 ```
 
 ## Document IDs (docid)
@@ -85,15 +85,15 @@ Docids are shown in search results as `#abc123` and can be used with `get` and `
 
 ```sh
 # Search returns docid in results
-qmd search "query" --json
+hwicortex search "query" --json
 # Output: [{"docid": "#abc123", "score": 0.85, "file": "docs/readme.md", ...}]
 
 # Get document by docid
-qmd get "#abc123"
-qmd get abc123              # Leading # is optional
+hwicortex get "#abc123"
+hwicortex get abc123              # Leading # is optional
 
 # Docids also work in multi-get comma-separated lists
-qmd multi-get "#abc123, #def456"
+hwicortex multi-get "#abc123, #def456"
 ```
 
 ## Options
@@ -115,12 +115,36 @@ qmd multi-get "#abc123, #def456"
 --json, --csv, --md, --xml, --files
 ```
 
+## Build & Install
+
+```sh
+bun install            # Install dependencies
+bun run build          # TypeScript → dist/ (required before bun link)
+bun link               # Install globally as 'hwicortex'
+```
+
 ## Development
 
 ```sh
-bun src/cli/qmd.ts <command>   # Run from source
-bun link               # Install globally as 'qmd'
+bun src/cli/qmd.ts <command>   # Run from source (no build needed)
 ```
+
+## SDK Usage (Library Mode)
+
+Other projects can import hwicortex as a library:
+
+```typescript
+import { createStore } from "hwicortex";
+
+const store = await createStore({
+  dbPath: "./index.sqlite",
+  config: { collections: { docs: { path: "./docs", pattern: "**/*.md" } } },
+});
+const results = await store.search({ query: "auth flow" });
+await store.close();
+```
+
+Entry point: `src/index.ts` → `dist/index.js`. Exports `createStore`, types, and utilities.
 
 ## Tests
 
@@ -142,7 +166,7 @@ bun test --preload ./src/test-preload.ts test/
 
 ## Important: Do NOT run automatically
 
-- Never run `qmd collection add`, `qmd embed`, or `qmd update` automatically
+- Never run `hwicortex collection add`, `hwicortex embed`, or `hwicortex update` automatically
 - Never modify the SQLite database directly
 - Write out example commands for the user to run manually
 - Index is stored at `~/.cache/qmd/index.sqlite`
@@ -150,7 +174,7 @@ bun test --preload ./src/test-preload.ts test/
 ## Do NOT compile
 
 - Never run `bun build --compile` - it overwrites the shell wrapper and breaks sqlite-vec
-- The `qmd` file is a shell script that runs compiled JS from `dist/` - do not replace it
+- The `bin/hwicortex` file is a shell script that runs compiled JS from `dist/` - do not replace it
 - `npm run build` compiles TypeScript to `dist/` via `tsc -p tsconfig.build.json`
 
 ## Releasing
@@ -172,13 +196,13 @@ Wiki pages are stored in `vault/wiki/{project}/` as Obsidian-compatible markdown
 ### Commands
 
 ```sh
-qmd wiki create "Title" --project <name> --tags t1,t2 --body "content"
-qmd wiki update "Title" --project <name> --append "more content"
-qmd wiki link "A" "B" --project <name>
-qmd wiki list [--project <name>] [--tag <tag>]
-qmd wiki show "Title" --project <name>
-qmd wiki rm "Title" --project <name>
-qmd wiki index --project <name>
+hwicortex wiki create "Title" --project <name> --tags t1,t2 --body "content"
+hwicortex wiki update "Title" --project <name> --append "more content"
+hwicortex wiki link "A" "B" --project <name>
+hwicortex wiki list [--project <name>] [--tag <tag>]
+hwicortex wiki show "Title" --project <name>
+hwicortex wiki rm "Title" --project <name>
+hwicortex wiki index --project <name>
 ```
 
 ### Wiki Suggestion Guidelines

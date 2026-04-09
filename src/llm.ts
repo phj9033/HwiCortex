@@ -581,7 +581,7 @@ export class LlamaCpp implements LLM {
 
       if (llama.gpu === false) {
         process.stderr.write(
-          "QMD Warning: no GPU acceleration, running on CPU (slow). Run 'qmd status' for details.\n"
+          "QMD Warning: no GPU acceleration, running on CPU (slow). Run 'hwicortex status' for details.\n"
         );
       }
       this.llama = llama;

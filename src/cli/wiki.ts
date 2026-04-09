@@ -1,5 +1,5 @@
 /**
- * CLI handler for `qmd wiki` subcommands.
+ * CLI handler for `hwicortex wiki` subcommands.
  */
 import { readFileSync, readdirSync, statSync, existsSync } from "fs";
 import { join } from "path";
@@ -34,18 +34,18 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
   const vaultDir = getVaultDir(flags);
 
   if (!subcommand) {
-    console.error("Usage: qmd wiki <create|update|rm|list|show|link|unlink|links|index> [options]");
+    console.error("Usage: hwicortex wiki <create|update|rm|list|show|link|unlink|links|index> [options]");
     console.error("");
     console.error("Commands:");
-    console.error("  qmd wiki create <title> --project <name> [--tags t1,t2] [--body text]");
-    console.error("  qmd wiki update <title> --project <name> [--append text] [--body text]");
-    console.error("  qmd wiki rm <title> --project <name>");
-    console.error("  qmd wiki list [--project <name>] [--tag <tag>]");
-    console.error("  qmd wiki show <title> --project <name> [--json]");
-    console.error("  qmd wiki link <titleA> <titleB> --project <name>");
-    console.error("  qmd wiki unlink <titleA> <titleB> --project <name>");
-    console.error("  qmd wiki links <title> --project <name>");
-    console.error("  qmd wiki index --project <name> | --all");
+    console.error("  hwicortex wiki create <title> --project <name> [--tags t1,t2] [--body text]");
+    console.error("  hwicortex wiki update <title> --project <name> [--append text] [--body text]");
+    console.error("  hwicortex wiki rm <title> --project <name>");
+    console.error("  hwicortex wiki list [--project <name>] [--tag <tag>]");
+    console.error("  hwicortex wiki show <title> --project <name> [--json]");
+    console.error("  hwicortex wiki link <titleA> <titleB> --project <name>");
+    console.error("  hwicortex wiki unlink <titleA> <titleB> --project <name>");
+    console.error("  hwicortex wiki links <title> --project <name>");
+    console.error("  hwicortex wiki index --project <name> | --all");
     process.exit(1);
   }
 
@@ -53,7 +53,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
     switch (subcommand) {
       case "create": {
         const title = args[1];
-        if (!title) { console.error("Usage: qmd wiki create <title> --project <name>"); process.exit(1); }
+        if (!title) { console.error("Usage: hwicortex wiki create <title> --project <name>"); process.exit(1); }
         const project = flags.project as string;
         if (!project) { console.error("Error: --project is required"); process.exit(1); }
         const tags = flags.tags ? (flags.tags as string).split(",").map(t => t.trim()) : [];
@@ -68,7 +68,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
 
       case "update": {
         const title = args[1];
-        if (!title) { console.error("Usage: qmd wiki update <title> --project <name>"); process.exit(1); }
+        if (!title) { console.error("Usage: hwicortex wiki update <title> --project <name>"); process.exit(1); }
         const project = flags.project as string;
         if (!project) { console.error("Error: --project is required"); process.exit(1); }
 
@@ -86,7 +86,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
       case "rm":
       case "remove": {
         const title = args[1];
-        if (!title) { console.error("Usage: qmd wiki rm <title> --project <name>"); process.exit(1); }
+        if (!title) { console.error("Usage: hwicortex wiki rm <title> --project <name>"); process.exit(1); }
         const project = flags.project as string;
         if (!project) { console.error("Error: --project is required"); process.exit(1); }
 
@@ -113,7 +113,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
 
       case "show": {
         const title = args[1];
-        if (!title) { console.error("Usage: qmd wiki show <title> --project <name>"); process.exit(1); }
+        if (!title) { console.error("Usage: hwicortex wiki show <title> --project <name>"); process.exit(1); }
         const project = flags.project as string;
         if (!project) { console.error("Error: --project is required"); process.exit(1); }
 
@@ -131,7 +131,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         const titleB = args[2];
         const project = flags.project as string;
         if (!titleA || !titleB || !project) {
-          console.error("Usage: qmd wiki link <titleA> <titleB> --project <name>");
+          console.error("Usage: hwicortex wiki link <titleA> <titleB> --project <name>");
           process.exit(1);
         }
         linkPages(vaultDir, titleA, titleB, project);
@@ -144,7 +144,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         const titleB = args[2];
         const project = flags.project as string;
         if (!titleA || !titleB || !project) {
-          console.error("Usage: qmd wiki unlink <titleA> <titleB> --project <name>");
+          console.error("Usage: hwicortex wiki unlink <titleA> <titleB> --project <name>");
           process.exit(1);
         }
         unlinkPages(vaultDir, titleA, titleB, project);
@@ -156,7 +156,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         const title = args[1];
         const project = flags.project as string;
         if (!title || !project) {
-          console.error("Usage: qmd wiki links <title> --project <name>");
+          console.error("Usage: hwicortex wiki links <title> --project <name>");
           process.exit(1);
         }
         const { related, backlinks } = getLinks(vaultDir, title, project);
@@ -177,7 +177,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
       case "index": {
         const project = flags.project as string;
         if (!project && !flags.all) {
-          console.error("Usage: qmd wiki index --project <name> or --all");
+          console.error("Usage: hwicortex wiki index --project <name> or --all");
           process.exit(1);
         }
         if (flags.all) {

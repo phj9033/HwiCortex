@@ -12,8 +12,8 @@
     }
   },
   "bin": {
-    "qmd": "bin/qmd",
-    "hwicortex": "bin/hwicortex"
+    "hwicortex": "bin/hwicortex",
+    "qmd": "bin/qmd"
   },
   "files": [
     "bin/",
