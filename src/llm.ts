@@ -1135,6 +1135,13 @@ export class LlamaCpp implements LLM {
       if (includeLexical) fallback.unshift({ type: 'lex', text: query });
       return fallback;
     } finally {
+      // Dispose grammar before genContext to prevent NAPI finalizer crash.
+      // grammar is a native NAPI object from node-llama-cpp; if left to GC,
+      // its finalizer tries to create new JS objects during collection,
+      // triggering "non-GC-safe function inside a NAPI finalizer" in Bun.
+      if (grammar && typeof (grammar as any).dispose === 'function') {
+        await (grammar as any).dispose();
+      }
       await genContext.dispose();
     }
   }
