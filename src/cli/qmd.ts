@@ -3432,11 +3432,12 @@ if (isMain) {
     // Bun exposes native dlsym; use _exit(2) syscall to skip atexit handlers and GC.
     // Falls back to SIGKILL if unavailable (shows "killed" in terminal but is safe).
     try {
-      const { dlopen, ptr, suffix } = require("bun:ffi") as any;
+      const { dlopen, suffix } = require("bun:ffi") as any;
       const lib = dlopen(`libc.${suffix}`, { _exit: { args: ["i32"], returns: "void" } });
       lib.symbols._exit(0);
     } catch {
-      process.kill(process.pid, "SIGKILL");
+      // Non-Bun runtimes (tsx/node) don't have bun:ffi — safe to use normal exit
+      process.exit(0);
     }
   }
 
