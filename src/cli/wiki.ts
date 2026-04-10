@@ -13,6 +13,8 @@ import {
   unlinkPages,
   getLinks,
   generateIndex,
+  bumpCount,
+  type CountAction,
 } from "../wiki.js";
 import type { Store } from "../store.js";
 
@@ -80,6 +82,12 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
           store,
         });
         console.log(`Updated: ${title}`);
+
+        // Bump count unless --no-count
+        if (!flags["no-count"]) {
+          const action = (flags.append ? "append" : "update") as CountAction;
+          bumpCount(vaultDir, title, project, action);
+        }
         break;
       }
 
@@ -123,6 +131,11 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         } else {
           console.log(page.body);
         }
+
+        // Bump count unless --no-count
+        if (!flags["no-count"]) {
+          bumpCount(vaultDir, title, project, "show");
+        }
         break;
       }
 
@@ -136,6 +149,12 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         }
         linkPages(vaultDir, titleA, titleB, project);
         console.log(`Linked: "${titleA}" ↔ "${titleB}"`);
+
+        // Bump count for both pages
+        if (!flags["no-count"]) {
+          bumpCount(vaultDir, titleA!, project, "link");
+          bumpCount(vaultDir, titleB!, project, "link");
+        }
         break;
       }
 
