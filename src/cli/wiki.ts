@@ -14,6 +14,7 @@ import {
   getLinks,
   generateIndex,
   bumpCount,
+  resetImportance,
   type CountAction,
 } from "../wiki.js";
 import type { Store } from "../store.js";
@@ -48,6 +49,7 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
     console.error("  hwicortex wiki unlink <titleA> <titleB> --project <name>");
     console.error("  hwicortex wiki links <title> --project <name>");
     console.error("  hwicortex wiki index --project <name> | --all");
+    console.error("  hwicortex wiki reset-importance --project <name> | --all [--all-counts]");
     process.exit(1);
   }
 
@@ -210,6 +212,22 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
           const path = generateIndex(vaultDir, project);
           console.log(`Generated: ${path}`);
         }
+        break;
+      }
+
+      case "reset-importance": {
+        const project = flags.project as string | undefined;
+        if (!project && !flags.all) {
+          console.error("Usage: hwicortex wiki reset-importance --project <name> or --all");
+          process.exit(1);
+        }
+        const allCounts = !!flags["all-counts"];
+        const count = resetImportance(vaultDir, {
+          project: flags.all ? undefined : project,
+          allCounts,
+        });
+        const scope = allCounts ? "all counts" : "importance";
+        console.log(`Reset ${scope} for ${count} page(s).`);
         break;
       }
 
