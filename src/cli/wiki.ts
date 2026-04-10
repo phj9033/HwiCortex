@@ -15,6 +15,8 @@ import {
   generateIndex,
   bumpCount,
   resetImportance,
+  findSimilar,
+  mergeIntoPage,
   type CountAction,
 } from "../wiki.js";
 import type { Store } from "../store.js";
@@ -65,6 +67,46 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
         let body = flags.body as string | undefined;
         if (flags.stdin) body = readStdin();
 
+        // Similarity detection (skip with --force, requires store)
+        if (!flags.force && store) {
+          const similar = await findSimilar(store, project, title, body);
+          if (similar.length > 0) {
+            const top = similar[0]!;
+            const isTTY = process.stdin.isTTY;
+            const autoMerge = !!flags["auto-merge"];
+
+            if (autoMerge) {
+              await mergeIntoPage(vaultDir, top.title, project, { sourceTitle: title, body: body || "", tags, store });
+              console.log(`✓ "${top.title}"에 내용 병합 (importance: ${getWikiPage(vaultDir, top.title, project).meta.importance})`);
+              break;
+            }
+
+            if (isTTY) {
+              console.error(`⚠ 유사 페이지 발견: "${top.title}" (score: ${top.score.toFixed(2)})`);
+              process.stderr.write("  병합할까요? [Y/n]: ");
+              const answer = await new Promise<string>((resolve) => {
+                const rl = require("readline").createInterface({ input: process.stdin, output: process.stderr });
+                rl.question("", (ans: string) => { rl.close(); resolve(ans.trim()); });
+              });
+
+              if (answer === "" || answer.toLowerCase() === "y") {
+                await mergeIntoPage(vaultDir, top.title, project, { sourceTitle: title, body: body || "", tags, store });
+                console.log(`✓ "${top.title}"에 내용 병합 (importance: ${getWikiPage(vaultDir, top.title, project).meta.importance})`);
+                break;
+              }
+              // User said N — fall through to create + auto-link
+              const filePath = await createWikiPage(vaultDir, { title, project, tags, sources, body, store });
+              linkPages(vaultDir, title, top.title, project);
+              console.log(`Created: ${filePath} (linked to "${top.title}")`);
+              break;
+            }
+
+            // Non-TTY, no --auto-merge: warn and create new page
+            console.error(`⚠ 유사 페이지 발견: "${top.title}" (score: ${top.score.toFixed(2)}) — 새 페이지로 생성합니다 (--auto-merge 로 자동 병합 가능)`);
+          }
+        }
+
+        // Default: create new page
         const filePath = await createWikiPage(vaultDir, { title, project, tags, sources, body, store });
         console.log(`Created: ${filePath}`);
         break;

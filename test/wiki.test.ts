@@ -606,3 +606,34 @@ describe("Wiki similarity detection", () => {
     expect(results).toEqual([]);
   });
 });
+
+describe("Wiki merge", () => {
+  let vaultDir: string;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-merge-"));
+  });
+
+  afterEach(() => {
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  test("mergeIntoPage appends content with merge marker", async () => {
+    await createWikiPage(vaultDir, { title: "Target", project: "p", tags: ["auth"], body: "original" });
+    const { mergeIntoPage } = await import("../src/wiki.js");
+    await mergeIntoPage(vaultDir, "Target", "p", {
+      sourceTitle: "New Page",
+      body: "new content",
+      tags: ["jwt"],
+    });
+
+    const page = getWikiPage(vaultDir, "Target", "p");
+    expect(page.body).toContain("original");
+    expect(page.body).toContain("new content");
+    expect(page.body).toContain('병합됨: "New Page"');
+    expect(page.meta.count_merge).toBe(1);
+    expect(page.meta.importance).toBe(3); // merge ×3
+    expect(page.meta.tags).toContain("auth");
+    expect(page.meta.tags).toContain("jwt");
+  });
+});

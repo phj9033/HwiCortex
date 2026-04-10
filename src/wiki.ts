@@ -601,6 +601,50 @@ export async function findSimilar(
 }
 
 // ============================================================================
+// Merge
+// ============================================================================
+
+export type MergeOpts = {
+  sourceTitle: string;
+  body: string;
+  tags?: string[];
+  store?: Store;
+};
+
+export async function mergeIntoPage(vaultDir: string, targetTitle: string, project: string, opts: MergeOpts): Promise<void> {
+  const page = getWikiPage(vaultDir, targetTitle, project);
+  const meta = { ...page.meta };
+
+  // Append body with merge marker
+  const mergeDate = today();
+  const mergeSection = `\n---\n> 병합됨: "${opts.sourceTitle}" (${mergeDate})\n\n${opts.body}\n`;
+  const body = page.body.trimEnd() + "\n" + mergeSection;
+
+  // Merge tags (deduplicate)
+  if (opts.tags && opts.tags.length > 0) {
+    const tagSet = new Set([...meta.tags, ...opts.tags]);
+    meta.tags = [...tagSet];
+  }
+
+  // Bump merge count
+  meta.count_merge += 1;
+  meta.last_accessed = mergeDate;
+  meta.updated = mergeDate;
+
+  const updated = recalcImportance(meta);
+  const fm = buildFrontmatter(updated);
+  const content = `${fm}\n${body}`;
+  atomicWrite(page.filePath, content);
+
+  // Re-index in FTS so merged content is searchable
+  if (opts.store) {
+    ensureWikiCollection(opts.store, vaultDir);
+    const slug = toWikiSlug(targetTitle);
+    await indexWikiPage(opts.store, project, `${slug}.md`, targetTitle, content);
+  }
+}
+
+// ============================================================================
 // Index Generation
 // ============================================================================
 
