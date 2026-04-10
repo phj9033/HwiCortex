@@ -63,6 +63,55 @@ describe("buildFrontmatter", () => {
     expect(fm).toMatch(/^---\n/);
     expect(fm).toMatch(/\n---$/);
   });
+
+  test("builds frontmatter with count fields", () => {
+    const fm = buildFrontmatter({
+      title: "Test",
+      project: "p",
+      tags: [],
+      sources: [],
+      related: [],
+      count_show: 5,
+      count_append: 3,
+      count_update: 1,
+      count_link: 2,
+      count_merge: 1,
+      count_search_hit: 8,
+      count_query_hit: 4,
+      importance: 12,
+      hit_count: 12,
+      last_accessed: "2026-04-10",
+    });
+    expect(fm).toContain("count_show: 5");
+    expect(fm).toContain("count_append: 3");
+    expect(fm).toContain("importance: 12");
+    expect(fm).toContain("hit_count: 12");
+    expect(fm).toContain("last_accessed: 2026-04-10");
+  });
+
+  test("omits count fields when all zero", () => {
+    const fm = buildFrontmatter({
+      title: "Test",
+      project: "p",
+      tags: [],
+      sources: [],
+      related: [],
+      count_show: 0,
+      count_append: 0,
+      count_update: 0,
+      count_link: 0,
+      count_merge: 0,
+      count_search_hit: 0,
+      count_query_hit: 0,
+      importance: 0,
+      hit_count: 0,
+      last_accessed: "",
+    });
+    expect(fm).not.toContain("count_");
+    expect(fm).not.toContain("importance:");
+    expect(fm).not.toContain("hit_count:");
+    expect(fm).not.toContain("last_accessed:");
+  });
 });
 
 describe("parseFrontmatter", () => {

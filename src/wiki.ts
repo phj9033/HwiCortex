@@ -55,24 +55,47 @@ function today(): string {
 /**
  * Build YAML frontmatter string from metadata.
  */
-export function buildFrontmatter(meta: Omit<WikiMeta, "created" | "updated" | "count_show" | "count_append" | "count_update" | "count_link" | "count_merge" | "count_search_hit" | "count_query_hit" | "importance" | "hit_count" | "last_accessed"> & { created?: string; updated?: string; count_show?: number; count_append?: number; count_update?: number; count_link?: number; count_merge?: number; count_search_hit?: number; count_query_hit?: number; importance?: number; hit_count?: number; last_accessed?: string }): string {
+export function buildFrontmatter(meta: Omit<WikiMeta, "created" | "updated"> & { created?: string; updated?: string }): string {
   const created = meta.created || today();
   const updated = meta.updated || today();
   const tags = meta.tags.length > 0 ? `[${meta.tags.join(", ")}]` : "[]";
   const sources = meta.sources.length > 0 ? `[${meta.sources.join(", ")}]` : "[]";
   const related = meta.related.length > 0 ? `[${meta.related.join(", ")}]` : "[]";
 
-  return [
+  const lines = [
     "---",
     `title: ${meta.title}`,
     `project: ${meta.project}`,
     `tags: ${tags}`,
     `sources: ${sources}`,
     `related: ${related}`,
-    `created: ${created}`,
-    `updated: ${updated}`,
-    "---",
-  ].join("\n");
+  ];
+
+  // Only emit count fields if any count is non-zero
+  const hasAnyCounts = meta.count_show || meta.count_append || meta.count_update ||
+    meta.count_link || meta.count_merge || meta.count_search_hit || meta.count_query_hit;
+
+  if (hasAnyCounts) {
+    lines.push(`count_show: ${meta.count_show}`);
+    lines.push(`count_append: ${meta.count_append}`);
+    lines.push(`count_update: ${meta.count_update}`);
+    lines.push(`count_link: ${meta.count_link}`);
+    lines.push(`count_merge: ${meta.count_merge}`);
+    lines.push(`count_search_hit: ${meta.count_search_hit}`);
+    lines.push(`count_query_hit: ${meta.count_query_hit}`);
+    lines.push(`importance: ${meta.importance}`);
+    lines.push(`hit_count: ${meta.hit_count}`);
+  }
+
+  if (meta.last_accessed) {
+    lines.push(`last_accessed: ${meta.last_accessed}`);
+  }
+
+  lines.push(`created: ${created}`);
+  lines.push(`updated: ${updated}`);
+  lines.push("---");
+
+  return lines.join("\n");
 }
 
 /**
@@ -229,6 +252,16 @@ export async function createWikiPage(vaultDir: string, opts: CreateOpts): Promis
     tags: opts.tags ?? [],
     sources: opts.sources ?? [],
     related: [],
+    count_show: 0,
+    count_append: 0,
+    count_update: 0,
+    count_link: 0,
+    count_merge: 0,
+    count_search_hit: 0,
+    count_query_hit: 0,
+    importance: 0,
+    hit_count: 0,
+    last_accessed: "",
   });
 
   const content = opts.body ? `${fm}\n\n${opts.body}\n` : `${fm}\n`;
