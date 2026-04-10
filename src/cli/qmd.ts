@@ -1819,6 +1819,7 @@ type OutputOptions = {
   chunkStrategy?: ChunkStrategy;  // "auto" (default) or "regex"
   sourceType?: string;   // Filter by source_type: docs|sessions|knowledge
   searchMode?: string;   // bm25|hybrid (default hybrid)
+  noCount?: boolean;     // Skip wiki hit count tracking
 };
 
 // Highlight query terms in text (skip short words < 3 chars)
@@ -2231,10 +2232,11 @@ function parseStructuredQuery(query: string): ParsedStructuredQuery | null {
 function bumpWikiHitCounts(results: SearchResult[], hitType: "search_hit" | "query_hit", vaultDir: string): void {
   for (const r of results) {
     if (r.collectionName !== "wiki") continue;
+    // displayPath format: "wiki/{project}/{slug}.md" — project is parts[1]
     const parts = r.displayPath.split("/");
-    if (parts.length < 2) continue;
+    if (parts.length < 3) continue;
     try {
-      bumpCount(vaultDir, r.title, parts[0]!, hitType);
+      bumpCount(vaultDir, r.title, parts[1]!, hitType);
     } catch {
       // Ignore — wiki page may not exist on disk
     }
@@ -2244,12 +2246,12 @@ function bumpWikiHitCounts(results: SearchResult[], hitType: "search_hit" | "que
 // Bump hit counts for wiki pages in query results (HybridQueryResult type)
 function bumpWikiHitCountsFromQuery(results: { file: string; displayPath: string; title: string }[], hitType: "search_hit" | "query_hit", vaultDir: string): void {
   for (const r of results) {
-    // Extract collection name from file path (qmd://collection/path)
     if (!r.file.startsWith("qmd://wiki/")) continue;
+    // displayPath format: "wiki/{project}/{slug}.md" — project is parts[1]
     const parts = r.displayPath.split("/");
-    if (parts.length < 2) continue;
+    if (parts.length < 3) continue;
     try {
-      bumpCount(vaultDir, r.title, parts[0]!, hitType);
+      bumpCount(vaultDir, r.title, parts[1]!, hitType);
     } catch {
       // Ignore — wiki page may not exist on disk
     }
@@ -2271,9 +2273,9 @@ async function search(query: string, opts: OutputOptions): Promise<void> {
     collectionNames
   );
 
-  // Bump hit counts for wiki pages
+  // Bump hit counts for wiki pages (unless --no-count)
   const vaultDir = process.env.QMD_VAULT_DIR;
-  if (vaultDir) {
+  if (vaultDir && !opts.noCount) {
     bumpWikiHitCounts(results, "search_hit", vaultDir);
   }
 
@@ -2474,9 +2476,9 @@ async function querySearch(query: string, opts: OutputOptions, _embedModel: stri
       });
     }
 
-    // Bump hit counts for wiki pages
+    // Bump hit counts for wiki pages (unless --no-count)
     const vaultDir = process.env.QMD_VAULT_DIR;
-    if (vaultDir) {
+    if (vaultDir && !opts.noCount) {
       bumpWikiHitCountsFromQuery(results, "query_hit", vaultDir);
     }
 
@@ -2617,6 +2619,7 @@ function parseCLI() {
     chunkStrategy: parseChunkStrategy(values["chunk-strategy"]),
     sourceType: values.source as string | undefined,
     searchMode: values.mode as string | undefined,
+    noCount: !!values["no-count"],
   };
 
   return {

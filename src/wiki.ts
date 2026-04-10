@@ -588,8 +588,10 @@ export async function findSimilar(
     }
   }
 
-  // Return all matches sorted by score descending
-  // No threshold filtering - BM25 scores for Korean text can be extremely low
+  // Return all FTS matches sorted by score descending.
+  // No explicit threshold: BM25 scores for Korean text are very low (<0.001),
+  // making a fixed threshold unreliable. FTS itself filters unrelated content
+  // (no keyword overlap = no results). The CLI layer presents only the top result.
   return [...scoreMap.values()]
     .sort((a, b) => b.score - a.score)
     .map((r) => ({
