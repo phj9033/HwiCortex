@@ -63,6 +63,7 @@ import {
   addLineNumbers,
   type ExpandedQuery,
   type HybridQueryExplain,
+  type SearchResult,
   DEFAULT_EMBED_MODEL,
   DEFAULT_EMBED_MAX_BATCH_BYTES,
   DEFAULT_EMBED_MAX_DOCS_PER_BATCH,
@@ -108,6 +109,7 @@ import { handleExtract } from "./extract.js";
 import { handleWatch } from "./watch.js";
 import { handleRebuild } from "./rebuild.js";
 import { handleWiki } from "./wiki.js";
+import { bumpCount } from "../wiki.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -2225,6 +2227,35 @@ function parseStructuredQuery(query: string): ParsedStructuredQuery | null {
   return typed.length > 0 ? { searches: typed, intent } : null;
 }
 
+// Bump hit counts for wiki pages in search results
+function bumpWikiHitCounts(results: SearchResult[], hitType: "search_hit" | "query_hit", vaultDir: string): void {
+  for (const r of results) {
+    if (r.collectionName !== "wiki") continue;
+    const parts = r.displayPath.split("/");
+    if (parts.length < 2) continue;
+    try {
+      bumpCount(vaultDir, r.title, parts[0]!, hitType);
+    } catch {
+      // Ignore — wiki page may not exist on disk
+    }
+  }
+}
+
+// Bump hit counts for wiki pages in query results (HybridQueryResult type)
+function bumpWikiHitCountsFromQuery(results: { file: string; displayPath: string; title: string }[], hitType: "search_hit" | "query_hit", vaultDir: string): void {
+  for (const r of results) {
+    // Extract collection name from file path (qmd://collection/path)
+    if (!r.file.startsWith("qmd://wiki/")) continue;
+    const parts = r.displayPath.split("/");
+    if (parts.length < 2) continue;
+    try {
+      bumpCount(vaultDir, r.title, parts[0]!, hitType);
+    } catch {
+      // Ignore — wiki page may not exist on disk
+    }
+  }
+}
+
 async function search(query: string, opts: OutputOptions): Promise<void> {
   const db = getDb();
 
@@ -2239,6 +2270,12 @@ async function search(query: string, opts: OutputOptions): Promise<void> {
     await searchFTS(db, query, fetchLimit, singleCollection, opts.sourceType),
     collectionNames
   );
+
+  // Bump hit counts for wiki pages
+  const vaultDir = process.env.QMD_VAULT_DIR;
+  if (vaultDir) {
+    bumpWikiHitCounts(results, "search_hit", vaultDir);
+  }
 
   // Add context to results
   const resultsWithContext = results.map(r => ({
@@ -2435,6 +2472,12 @@ async function querySearch(query: string, opts: OutputOptions, _embedModel: stri
         const prefixes = collectionNames.map(n => `qmd://${n}/`);
         return prefixes.some(p => r.file.startsWith(p));
       });
+    }
+
+    // Bump hit counts for wiki pages
+    const vaultDir = process.env.QMD_VAULT_DIR;
+    if (vaultDir) {
+      bumpWikiHitCountsFromQuery(results, "query_hit", vaultDir);
     }
 
     closeDb();
