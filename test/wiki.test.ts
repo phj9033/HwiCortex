@@ -3,7 +3,7 @@ import { existsSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { atomicWrite } from "../src/knowledge/vault-writer.js";
-import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance, resetImportance } from "../src/wiki.js";
+import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance, resetImportance, findSimilar } from "../src/wiki.js";
 import { createStore, searchFTS, getDocumentId, findActiveDocument } from "../src/store.js";
 import type { Store } from "../src/store.js";
 
@@ -559,5 +559,50 @@ describe("Wiki importance tracking", () => {
 
     expect(getWikiPage(vaultDir, "P1 Page", "proj1").meta.count_show).toBe(0);
     expect(getWikiPage(vaultDir, "P2 Page", "proj2").meta.count_append).toBe(0);
+  });
+});
+
+describe("Wiki similarity detection", () => {
+  let vaultDir: string;
+  let store: Store;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-similar-"));
+    store = createStore(join(vaultDir, "test-index.sqlite"));
+  });
+
+  afterEach(() => {
+    store.close();
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  test("findSimilar returns matching wiki page by title", async () => {
+    await createWikiPage(vaultDir, {
+      title: "JWT 인증 흐름",
+      project: "demo",
+      body: "토큰 만료 갱신 로직",
+      store,
+    });
+
+    const results = await findSimilar(store, "demo", "JWT 토큰 갱신", "만료 시 리프레시");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]!.title).toBe("JWT 인증 흐름");
+  });
+
+  test("findSimilar returns empty when no wiki pages indexed", async () => {
+    const results = await findSimilar(store, "demo", "Some title", "Some body");
+    expect(results).toEqual([]);
+  });
+
+  test("findSimilar returns empty for unrelated content", async () => {
+    await createWikiPage(vaultDir, {
+      title: "Docker 배포 설정",
+      project: "demo",
+      body: "컨테이너 오케스트레이션",
+      store,
+    });
+
+    const results = await findSimilar(store, "demo", "요리 레시피", "파스타 만드는 법");
+    expect(results).toEqual([]);
   });
 });

@@ -8,7 +8,7 @@ import { join, basename } from "path";
 import { createHash } from "crypto";
 import { atomicWrite } from "./knowledge/vault-writer.js";
 import type { Store } from "./store.js";
-import { insertDocument, insertContent, getDocumentId, upsertFTS, deactivateDocument, upsertStoreCollection } from "./store.js";
+import { insertDocument, insertContent, getDocumentId, upsertFTS, deactivateDocument, upsertStoreCollection, searchFTS } from "./store.js";
 
 // ============================================================================
 // Slug generation
@@ -530,6 +530,74 @@ export function getLinks(
     .map((p) => p.title);
 
   return { related, backlinks };
+}
+
+// ============================================================================
+// Similarity Detection
+// ============================================================================
+
+export type SimilarResult = {
+  title: string;
+  project: string;
+  score: number;
+  filePath: string;
+};
+
+export async function findSimilar(
+  store: Store,
+  project: string,
+  title: string,
+  body?: string,
+): Promise<SimilarResult[]> {
+  const db = store.db;
+
+  // Search by title (weighted ×2)
+  const titleResults = await searchFTS(db, title, 3, WIKI_COLLECTION);
+  // Search by body
+  const bodyResults = body ? await searchFTS(db, body, 3, WIKI_COLLECTION) : [];
+
+  // Filter to wiki collection in same project, merge scores
+  // Use collectionName (not filepath) to identify wiki results,
+  // and displayPath (format: "wiki/{project}/{slug}.md") for project filtering
+  const scoreMap = new Map<string, { score: number; title: string; displayPath: string }>();
+
+  for (const r of titleResults) {
+    if (r.collectionName !== "wiki") continue;
+    // displayPath format: "wiki/{project}/{slug}.md"
+    if (!r.displayPath.startsWith(`wiki/${project}/`)) continue;
+    const key = r.displayPath;
+    const existing = scoreMap.get(key);
+    const titleScore = r.score * 2; // title weight ×2
+    if (existing) {
+      existing.score += titleScore;
+    } else {
+      scoreMap.set(key, { score: titleScore, title: r.title, displayPath: r.displayPath });
+    }
+  }
+
+  for (const r of bodyResults) {
+    if (r.collectionName !== "wiki") continue;
+    // displayPath format: "wiki/{project}/{slug}.md"
+    if (!r.displayPath.startsWith(`wiki/${project}/`)) continue;
+    const key = r.displayPath;
+    const existing = scoreMap.get(key);
+    if (existing) {
+      existing.score += r.score;
+    } else {
+      scoreMap.set(key, { score: r.score, title: r.title, displayPath: r.displayPath });
+    }
+  }
+
+  // Return all matches sorted by score descending
+  // No threshold filtering - BM25 scores for Korean text can be extremely low
+  return [...scoreMap.values()]
+    .sort((a, b) => b.score - a.score)
+    .map((r) => ({
+      title: r.title,
+      project,
+      score: r.score,
+      filePath: r.displayPath,
+    }));
 }
 
 // ============================================================================
