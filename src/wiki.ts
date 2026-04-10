@@ -138,6 +138,40 @@ export function bumpCount(vaultDir: string, title: string, project: string, acti
   atomicWrite(page.filePath, content);
 }
 
+export type ResetOpts = {
+  project?: string;  // undefined = all projects
+  allCounts: boolean; // true = reset everything, false = importance only
+};
+
+export function resetImportance(vaultDir: string, opts: ResetOpts): number {
+  const pages = listWikiPages(vaultDir, { project: opts.project });
+  let count = 0;
+
+  for (const pageMeta of pages) {
+    const content = readFileSync(pageMeta.filePath, "utf-8");
+    const { meta, body } = parseFrontmatter(content);
+
+    // Reset importance-related counts
+    meta.count_show = 0;
+    meta.count_append = 0;
+    meta.count_update = 0;
+    meta.count_link = 0;
+    meta.count_merge = 0;
+
+    if (opts.allCounts) {
+      meta.count_search_hit = 0;
+      meta.count_query_hit = 0;
+    }
+
+    const updated = recalcImportance(meta);
+    const fm = buildFrontmatter(updated);
+    atomicWrite(pageMeta.filePath, `${fm}\n${body}`);
+    count++;
+  }
+
+  return count;
+}
+
 /**
  * Parse YAML frontmatter and body from a wiki markdown file.
  * Simple parser — does not depend on a YAML library.

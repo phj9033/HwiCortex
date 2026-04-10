@@ -3,7 +3,7 @@ import { existsSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { atomicWrite } from "../src/knowledge/vault-writer.js";
-import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance } from "../src/wiki.js";
+import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance, resetImportance } from "../src/wiki.js";
 import { createStore, searchFTS, getDocumentId, findActiveDocument } from "../src/store.js";
 import type { Store } from "../src/store.js";
 
@@ -513,5 +513,51 @@ describe("Wiki importance tracking", () => {
     expect(page.meta.count_search_hit).toBe(1);
     expect(page.meta.hit_count).toBe(1);
     expect(page.meta.last_accessed).toBe(""); // search hits don't update last_accessed
+  });
+
+  test("resetImportance resets importance counts only", async () => {
+    await createWikiPage(vaultDir, { title: "Reset Test", project: "p", body: "hello" });
+    bumpCount(vaultDir, "Reset Test", "p", "show");
+    bumpCount(vaultDir, "Reset Test", "p", "show");
+    bumpCount(vaultDir, "Reset Test", "p", "search_hit");
+    bumpCount(vaultDir, "Reset Test", "p", "search_hit");
+    bumpCount(vaultDir, "Reset Test", "p", "search_hit");
+
+    resetImportance(vaultDir, { project: "p", allCounts: false });
+
+    const page = getWikiPage(vaultDir, "Reset Test", "p");
+    expect(page.meta.count_show).toBe(0);
+    expect(page.meta.importance).toBe(0);
+    // hit counts preserved
+    expect(page.meta.count_search_hit).toBe(3);
+    expect(page.meta.hit_count).toBe(3);
+    // last_accessed preserved
+    expect(page.meta.last_accessed).not.toBe("");
+  });
+
+  test("resetImportance --all-counts resets everything", async () => {
+    await createWikiPage(vaultDir, { title: "Full Reset", project: "p", body: "hello" });
+    bumpCount(vaultDir, "Full Reset", "p", "show");
+    bumpCount(vaultDir, "Full Reset", "p", "search_hit");
+
+    resetImportance(vaultDir, { project: "p", allCounts: true });
+
+    const page = getWikiPage(vaultDir, "Full Reset", "p");
+    expect(page.meta.count_show).toBe(0);
+    expect(page.meta.count_search_hit).toBe(0);
+    expect(page.meta.importance).toBe(0);
+    expect(page.meta.hit_count).toBe(0);
+  });
+
+  test("resetImportance with --all resets all projects", async () => {
+    await createWikiPage(vaultDir, { title: "P1 Page", project: "proj1", body: "a" });
+    await createWikiPage(vaultDir, { title: "P2 Page", project: "proj2", body: "b" });
+    bumpCount(vaultDir, "P1 Page", "proj1", "show");
+    bumpCount(vaultDir, "P2 Page", "proj2", "append");
+
+    resetImportance(vaultDir, { allCounts: false }); // no project = all projects
+
+    expect(getWikiPage(vaultDir, "P1 Page", "proj1").meta.count_show).toBe(0);
+    expect(getWikiPage(vaultDir, "P2 Page", "proj2").meta.count_append).toBe(0);
   });
 });
