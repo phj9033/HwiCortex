@@ -203,7 +203,15 @@ hwicortex wiki list [--project <name>] [--tag <tag>]
 hwicortex wiki show "Title" --project <name>
 hwicortex wiki rm "Title" --project <name>
 hwicortex wiki index --project <name>
+hwicortex wiki reset-importance --project <name> | --all [--all-counts]
 ```
+
+### Wiki Options
+
+- `--no-count`: Skip importance/hit count tracking (for scripts/automation)
+- `--auto-merge`: Auto-merge into similar page on create (for MCP/SDK)
+- `--force`: Skip similarity check on create
+- `--all-counts`: Reset all counts including hit_count (for reset-importance)
 
 ### Wiki Suggestion Guidelines
 
