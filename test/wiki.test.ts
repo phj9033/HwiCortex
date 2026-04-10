@@ -83,6 +83,63 @@ Body content here.`;
     expect(meta.tags).toEqual(["a", "b"]);
     expect(body.trim()).toBe("Body content here.");
   });
+
+  test("parses count fields and importance from frontmatter", () => {
+    const md = `---
+title: Test
+project: p
+tags: []
+sources: []
+related: []
+count_show: 5
+count_append: 3
+count_update: 1
+count_link: 2
+count_merge: 1
+count_search_hit: 8
+count_query_hit: 4
+importance: 12
+hit_count: 12
+last_accessed: 2026-04-10
+created: 2026-04-08
+updated: 2026-04-08
+---
+
+Body content here.`;
+    const { meta, body } = parseFrontmatter(md);
+    expect(meta.title).toBe("Test");
+    expect(meta.count_show).toBe(5);
+    expect(meta.count_append).toBe(3);
+    expect(meta.count_update).toBe(1);
+    expect(meta.count_link).toBe(2);
+    expect(meta.count_merge).toBe(1);
+    expect(meta.count_search_hit).toBe(8);
+    expect(meta.count_query_hit).toBe(4);
+    expect(meta.importance).toBe(12);
+    expect(meta.hit_count).toBe(12);
+    expect(meta.last_accessed).toBe("2026-04-10");
+    expect(body.trim()).toBe("Body content here.");
+  });
+
+  test("missing count fields default to 0", () => {
+    const md = `---
+title: Old Page
+project: p
+tags: []
+sources: []
+related: []
+created: 2026-04-08
+updated: 2026-04-08
+---
+
+Legacy content.`;
+    const { meta } = parseFrontmatter(md);
+    expect(meta.count_show).toBe(0);
+    expect(meta.count_append).toBe(0);
+    expect(meta.importance).toBe(0);
+    expect(meta.hit_count).toBe(0);
+    expect(meta.last_accessed).toBe("");
+  });
 });
 
 describe("Wiki CRUD", () => {

@@ -34,6 +34,16 @@ export type WikiMeta = {
   tags: string[];
   sources: string[];
   related: string[];
+  count_show: number;
+  count_append: number;
+  count_update: number;
+  count_link: number;
+  count_merge: number;
+  count_search_hit: number;
+  count_query_hit: number;
+  importance: number;
+  hit_count: number;
+  last_accessed: string;
   created?: string;
   updated?: string;
 };
@@ -45,7 +55,7 @@ function today(): string {
 /**
  * Build YAML frontmatter string from metadata.
  */
-export function buildFrontmatter(meta: Omit<WikiMeta, "created" | "updated"> & { created?: string; updated?: string }): string {
+export function buildFrontmatter(meta: Omit<WikiMeta, "created" | "updated" | "count_show" | "count_append" | "count_update" | "count_link" | "count_merge" | "count_search_hit" | "count_query_hit" | "importance" | "hit_count" | "last_accessed"> & { created?: string; updated?: string; count_show?: number; count_append?: number; count_update?: number; count_link?: number; count_merge?: number; count_search_hit?: number; count_query_hit?: number; importance?: number; hit_count?: number; last_accessed?: string }): string {
   const created = meta.created || today();
   const updated = meta.updated || today();
   const tags = meta.tags.length > 0 ? `[${meta.tags.join(", ")}]` : "[]";
@@ -90,6 +100,13 @@ export function parseFrontmatter(content: string): { meta: WikiMeta; body: strin
     return inner.split(",").map((s) => s.trim()).filter(Boolean);
   };
 
+  const getInt = (key: string): number => {
+    const raw = get(key);
+    if (!raw) return 0;
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? 0 : n;
+  };
+
   return {
     meta: {
       title: get("title"),
@@ -97,6 +114,16 @@ export function parseFrontmatter(content: string): { meta: WikiMeta; body: strin
       tags: getArray("tags"),
       sources: getArray("sources"),
       related: getArray("related"),
+      count_show: getInt("count_show"),
+      count_append: getInt("count_append"),
+      count_update: getInt("count_update"),
+      count_link: getInt("count_link"),
+      count_merge: getInt("count_merge"),
+      count_search_hit: getInt("count_search_hit"),
+      count_query_hit: getInt("count_query_hit"),
+      importance: getInt("importance"),
+      hit_count: getInt("hit_count"),
+      last_accessed: get("last_accessed"),
       created: get("created"),
       updated: get("updated"),
     },
