@@ -1,4 +1,4 @@
-# QMD - Query Markup Documents
+# HwiCortex
 
 Use Bun instead of Node.js (`bun` not `node`, `bun install` not `npm install`).
 
@@ -163,6 +163,7 @@ bun test --preload ./src/test-preload.ts test/
 - Reciprocal Rank Fusion (RRF) for combining results
 - Smart chunking: 900 tokens/chunk with 15% overlap, prefers markdown headings as boundaries
 - AST-aware chunking: use `--chunk-strategy auto` to chunk code files (.ts/.js/.py/.go/.rs) at function/class/import boundaries via tree-sitter. Default is `regex` (existing behavior). Markdown and unknown file types always use regex chunking.
+- Korean morphological analysis via mecab-ko: content morphemes (nouns, verbs, adjectives) are indexed for BM25 so inflected forms match (e.g. "검색" matches "검색했다"). Requires mecab-ko system package; falls back to standard FTS5 tokenization when not installed.
 
 ## Important: Do NOT run automatically
 

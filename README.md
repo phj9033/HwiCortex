@@ -485,8 +485,21 @@ hwicortex wiki list [--project <name>] [--tag <tag>]
 hwicortex wiki show "제목" --project <name>
 hwicortex wiki rm "제목" --project <name>
 hwicortex wiki link "A" "B" --project <name>
+hwicortex wiki unlink "A" "B" --project <name>
+hwicortex wiki links "제목" --project <name>
 hwicortex wiki index --project <name>
+hwicortex wiki reset-importance --project <name> | --all [--all-counts]
+
+# 위키 옵션
+--no-count          # importance/hit count 추적 스킵 (스크립트/자동화용)
+--auto-merge        # 생성 시 유사 페이지에 자동 병합 (MCP/SDK용)
+--force             # 생성 시 유사도 검사 스킵
+--all-counts        # reset-importance에서 hit_count까지 포함 초기화
 ```
+
+위키 페이지는 `vault/wiki/{project}/`에 Obsidian 호환 마크다운으로 저장된다.
+생성 시 유사한 기존 페이지가 있으면 자동 감지하여 병합을 제안한다.
+검색(`search`/`query`) 결과에 위키 페이지가 포함되면 해당 페이지의 `hit_count`가 자동 증가하여 중요도를 추적한다.
 
 ### 지식 추출 (HwiCortex 고유)
 
@@ -566,9 +579,9 @@ vault/
 │   └── {project}/
 │       ├── popup-duplicate-fix.md
 │       └── unirx-message-pattern.md
-├── wiki/                         ← 위키 페이지
+├── wiki/                         ← 위키 페이지 (importance/hit_count 추적)
 │   └── {project}/
-│       └── {title}.md
+│       └── {title}.md            — frontmatter에 importance, hit_count 등 메트릭 포함
 └── .obsidian/                    ← Obsidian 설정 (HwiCortex 수정 안 함)
 ```
 
@@ -654,8 +667,9 @@ hwicortex/
 │   ├── llm.ts                  # LLM 추상화 (node-llama-cpp 래퍼)
 │   ├── collections.ts          # 컬렉션 설정 관리 (YAML)
 │   ├── db.ts                   # SQLite 크로스 런타임 호환
-│   ├── korean.ts               # 한국어 토크나이징 (Mecab)
+│   ├── korean.ts               # 한국어 형태소 분석 (mecab-ko)
 │   ├── ast.ts                  # AST 기반 코드 청킹 (tree-sitter)
+│   ├── wiki.ts                 # 위키 CRUD + importance 추적
 │   ├── config/
 │   │   └── config-loader.ts    # YAML 설정 로더 (hwicortex.yaml)
 │   ├── mcp/
@@ -820,6 +834,7 @@ HwiCortex는 세 가지 검색 모드를 제공한다.
 - **콘텐츠 주소 지정**: 해시 기반 중복 제거로 동일 내용은 한 번만 임베딩한다.
 - **강한 신호 스킵**: BM25가 확신할 때는 비용이 큰 LLM 확장을 건너뛴다.
 - **크래시 안전**: SQLite 트랜잭션과 삽입 순서로 중단 시에도 데이터 정합성을 보장한다.
+- **한국어 형태소 분석**: mecab-ko가 설치된 환경에서는 한국어 텍스트를 내용 형태소(명사, 동사, 형용사)로 분해하여 인덱싱한다. "검색"으로 "검색했다", "검색하는" 등의 활용형을 매칭할 수 있다.
 
 ---
 
