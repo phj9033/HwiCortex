@@ -3,7 +3,7 @@ import { existsSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { atomicWrite } from "../src/knowledge/vault-writer.js";
-import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex } from "../src/wiki.js";
+import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance } from "../src/wiki.js";
 import { createStore, searchFTS, getDocumentId, findActiveDocument } from "../src/store.js";
 import type { Store } from "../src/store.js";
 
@@ -459,5 +459,59 @@ describe("Wiki index generation", () => {
     const content = readFileSync(indexPath, "utf-8");
     expect(content).toContain("## uncategorized");
     expect(content).toContain("[[No Tag]]");
+  });
+});
+
+describe("Wiki importance tracking", () => {
+  let vaultDir: string;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-importance-"));
+  });
+
+  afterEach(() => {
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  test("recalcImportance computes weighted sum", () => {
+    const meta = {
+      title: "T", project: "p", tags: [], sources: [], related: [],
+      count_show: 5, count_append: 3, count_update: 1,
+      count_link: 2, count_merge: 1,
+      count_search_hit: 8, count_query_hit: 4,
+      importance: 0, hit_count: 0, last_accessed: "",
+    };
+    const result = recalcImportance(meta);
+    // importance = 5×1 + 3×2 + 1×1 + 2×1 + 1×3 = 5+6+1+2+3 = 17
+    expect(result.importance).toBe(17);
+    // hit_count = 8 + 4 = 12
+    expect(result.hit_count).toBe(12);
+  });
+
+  test("bumpCount increments show and updates importance", async () => {
+    await createWikiPage(vaultDir, { title: "Bump Test", project: "p", body: "hello" });
+    bumpCount(vaultDir, "Bump Test", "p", "show");
+    const page = getWikiPage(vaultDir, "Bump Test", "p");
+    expect(page.meta.count_show).toBe(1);
+    expect(page.meta.importance).toBe(1);
+    expect(page.meta.last_accessed).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  test("bumpCount increments append with correct weight", async () => {
+    await createWikiPage(vaultDir, { title: "Append Bump", project: "p", body: "hello" });
+    bumpCount(vaultDir, "Append Bump", "p", "append");
+    bumpCount(vaultDir, "Append Bump", "p", "append");
+    const page = getWikiPage(vaultDir, "Append Bump", "p");
+    expect(page.meta.count_append).toBe(2);
+    expect(page.meta.importance).toBe(4); // 2×2
+  });
+
+  test("bumpCount increments search_hit without updating last_accessed", async () => {
+    await createWikiPage(vaultDir, { title: "Hit Test", project: "p", body: "hello" });
+    bumpCount(vaultDir, "Hit Test", "p", "search_hit");
+    const page = getWikiPage(vaultDir, "Hit Test", "p");
+    expect(page.meta.count_search_hit).toBe(1);
+    expect(page.meta.hit_count).toBe(1);
+    expect(page.meta.last_accessed).toBe(""); // search hits don't update last_accessed
   });
 });

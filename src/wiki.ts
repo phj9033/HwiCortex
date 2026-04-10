@@ -98,6 +98,46 @@ export function buildFrontmatter(meta: Omit<WikiMeta, "created" | "updated"> & {
   return lines.join("\n");
 }
 
+const IMPORTANCE_WEIGHTS: Record<string, number> = {
+  count_show: 1,
+  count_append: 2,
+  count_update: 1,
+  count_link: 1,
+  count_merge: 3,
+};
+
+export function recalcImportance(meta: WikiMeta): WikiMeta {
+  const importance =
+    meta.count_show * IMPORTANCE_WEIGHTS.count_show! +
+    meta.count_append * IMPORTANCE_WEIGHTS.count_append! +
+    meta.count_update * IMPORTANCE_WEIGHTS.count_update! +
+    meta.count_link * IMPORTANCE_WEIGHTS.count_link! +
+    meta.count_merge * IMPORTANCE_WEIGHTS.count_merge!;
+  const hit_count = meta.count_search_hit + meta.count_query_hit;
+  return { ...meta, importance, hit_count };
+}
+
+export type CountAction = "show" | "append" | "update" | "link" | "merge" | "search_hit" | "query_hit";
+
+const DIRECT_ACTIONS: Set<CountAction> = new Set(["show", "append", "update", "link", "merge"]);
+
+export function bumpCount(vaultDir: string, title: string, project: string, action: CountAction): void {
+  const page = getWikiPage(vaultDir, title, project);
+  const meta = { ...page.meta };
+  const key = `count_${action}` as keyof WikiMeta;
+  (meta as any)[key] = ((meta as any)[key] as number) + 1;
+
+  // Only update last_accessed for direct actions (not search/query hits)
+  if (DIRECT_ACTIONS.has(action)) {
+    meta.last_accessed = today();
+  }
+
+  const updated = recalcImportance(meta);
+  const fm = buildFrontmatter(updated);
+  const content = `${fm}\n${page.body}`;
+  atomicWrite(page.filePath, content);
+}
+
 /**
  * Parse YAML frontmatter and body from a wiki markdown file.
  * Simple parser — does not depend on a YAML library.
