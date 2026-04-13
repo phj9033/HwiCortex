@@ -397,13 +397,41 @@ ingest:
 
 ### 환경 변수
 
+#### 경로 설정
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `QMD_VAULT_DIR` | 위키 볼트 디렉토리 경로 (또는 `--vault-dir` 플래그) | 없음 (필수) |
+| `QMD_CONFIG_DIR` | 설정 디렉토리 오버라이드 | `$XDG_CONFIG_HOME/qmd` 또는 `~/.config/qmd` |
+| `XDG_CACHE_HOME` | 캐시 디렉토리 (DB, 모델 저장) | `~/.cache` → `~/.cache/qmd/` |
+| `XDG_CONFIG_HOME` | XDG 설정 디렉토리 | `~/.config` → `~/.config/qmd/` |
+
+> **QMD_VAULT_DIR 설정 방법**: 위키 기능(`hwicortex wiki ...`)을 사용하려면 반드시 설정해야 한다.
+>
+> ```sh
+> # 셸 프로파일에 추가 (~/.zshrc 또는 ~/.bashrc)
+> export QMD_VAULT_DIR=~/my-obsidian-vault
+>
+> # 또는 명령어마다 플래그로 지정
+> hwicortex wiki list --vault-dir ~/my-obsidian-vault
+> ```
+
+#### 모델 설정
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `QMD_EMBED_MODEL` | 임베딩 모델 URI 오버라이드 | embeddinggemma-300M |
+| `QMD_RERANK_MODEL` | 리랭킹 모델 URI 오버라이드 | Qwen3-Reranker-0.6B |
+| `QMD_GENERATE_MODEL` | 생성 모델 URI 오버라이드 | qmd-query-expansion-1.7B |
+| `QMD_EMBED_CONTEXT_SIZE` | 임베딩 컨텍스트 크기 | 2048 |
+| `QMD_RERANK_CONTEXT_SIZE` | 리랭킹 컨텍스트 크기 | 4096 |
+| `QMD_EXPAND_CONTEXT_SIZE` | 쿼리 확장 컨텍스트 크기 | 2048 |
+| `QMD_LLAMA_GPU` | GPU 비활성화 (`false`/`off`/`none`/`0`으로 CPU 강제) | 자동 감지 |
+
+#### 기타
+
 | 변수 | 설명 |
 |------|------|
-| `QMD_EMBED_MODEL` | 임베딩 모델 URI 오버라이드 |
-| `QMD_RERANK_MODEL` | 리랭킹 모델 URI 오버라이드 |
-| `QMD_GENERATE_MODEL` | 생성 모델 URI 오버라이드 |
-| `QMD_EMBED_CONTEXT_SIZE` | 임베딩 컨텍스트 크기 (기본 2048) |
-| `QMD_RERANK_CONTEXT_SIZE` | 리랭킹 컨텍스트 크기 (기본 4096) |
 | `QMD_EDITOR_URI` | 에디터 URI 템플릿 (기본: `vscode://file/{path}:{line}:{col}`) |
 | `ANTHROPIC_API_KEY` | Claude API 키 (지식 추출 시 필요) |
 | `NO_COLOR` | 터미널 컬러 비활성화 |
@@ -411,6 +439,14 @@ ingest:
 ---
 
 ## CLI 명령어 레퍼런스
+
+### 글로벌 옵션
+
+```sh
+--index <name>     # 네임드 인덱스 사용 (기본: "index")
+--help, -h         # 도움말
+--version, -v      # 버전 정보
+```
 
 ### 문서 검색 (QMD 기반)
 
@@ -442,6 +478,7 @@ hwicortex vsearch <query>                # 벡터 유사도 검색
 --full                             # 전체 문서 내용 포함
 --no-rerank                        # 리랭킹 스킵 (빠름)
 --chunk-strategy <auto|regex>      # 청킹 전략
+--intent <text>                    # 검색 의도 힌트 (모호한 쿼리 보완)
 
 # 출력 포맷
 --json | --csv | --md | --xml | --files
@@ -451,6 +488,9 @@ hwicortex vsearch <query>                # 벡터 유사도 검색
 
 ```sh
 hwicortex get <file|#docid>              # 단일 문서 조회
+    --from <line>                        # 시작 줄 번호
+    -l <lines>                           # 출력 줄 수 제한
+    --line-numbers                       # 줄 번호 표시
 hwicortex multi-get <pattern>            # 여러 문서 조회 (glob 또는 쉼표 구분)
 hwicortex ls [collection[/path]]         # 인덱싱된 파일 목록
 ```
@@ -472,7 +512,11 @@ hwicortex context rm <path>              # 컨텍스트 삭제
 hwicortex status                         # 인덱스 상태 및 컬렉션 통계
 hwicortex update [--pull]                # 전체 재인덱싱 (--pull: git pull 먼저)
 hwicortex embed                          # 벡터 임베딩 생성/갱신
-hwicortex pull                           # LLM 모델 다운로드
+    --force                              # 캐시 무시, 전체 재생성
+    --max-docs-per-batch <num>           # 배치당 최대 문서 수
+    --max-batch-mb <num>                 # 배치당 최대 MB
+    --chunk-strategy <auto|regex>        # 청킹 전략 (auto: AST 기반)
+hwicortex pull [--refresh]               # LLM 모델 다운로드 (--refresh: 재확인)
 hwicortex cleanup                        # 캐시 정리 및 DB vacuum
 ```
 
