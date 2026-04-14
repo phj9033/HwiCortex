@@ -2591,6 +2591,7 @@ function parseCLI() {
       "chunk-strategy": { type: "string" },  // "regex" (default) or "auto" (AST for code files)
       // Graph options
       "no-graph": { type: "boolean", default: false },
+      obsidian: { type: "boolean" },
       // HwiCortex options
       source: { type: "string" },        // --source docs|sessions|knowledge
       mode: { type: "string" },          // --mode bm25|hybrid
@@ -3500,11 +3501,15 @@ if (isMain) {
       if (subcmd === "clusters") {
         console.log(handleClusters(store.db, opts));
       } else if (cli.values.obsidian) {
-        console.error("Obsidian graph export not yet implemented (Task 9)");
+        const { writeObsidianGraph } = await import("./graph-obsidian.js");
+        const collectionValue = cli.values.collection;
+        const collectionStr = Array.isArray(collectionValue) ? collectionValue[0] : collectionValue;
+        const project = (typeof collectionStr === "string" ? collectionStr : undefined) || "default";
+        await writeObsidianGraph(store.db, "vault", project);
       } else if (subcmd) {
         console.log(handleGraph(store.db, subcmd, opts));
       } else {
-        console.error("Usage: hwicortex graph <file> | clusters [--collection]");
+        console.error("Usage: hwicortex graph <file> | clusters [--collection] | --obsidian");
         process.exit(1);
       }
       break;
