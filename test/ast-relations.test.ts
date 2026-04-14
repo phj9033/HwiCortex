@@ -86,4 +86,58 @@ describe("extractSymbolsAndRelations", () => {
     expect(result.symbols).toEqual([]);
     expect(result.relations).toEqual([]);
   });
+
+  describe("relation extraction", () => {
+    describe("imports", () => {
+      it("extracts TypeScript imports", async () => {
+        const code = `import { createStore } from './store';\nimport path from 'path';`;
+        const result = await extractSymbolsAndRelations(code, "test.ts");
+        const imports = result.relations.filter(r => r.type === "imports");
+        expect(imports).toContainEqual(
+          expect.objectContaining({ targetRef: "./store", targetSymbol: "createStore" })
+        );
+      });
+
+      it("extracts Python from-imports", async () => {
+        const code = `from .store import create_store`;
+        const result = await extractSymbolsAndRelations(code, "test.py");
+        expect(result.relations).toContainEqual(
+          expect.objectContaining({ type: "imports", targetRef: ".store", targetSymbol: "create_store" })
+        );
+      });
+    });
+
+    describe("extends", () => {
+      it("extracts TypeScript class extends", async () => {
+        const code = `class SearchEngine extends BaseEngine {}`;
+        const result = await extractSymbolsAndRelations(code, "test.ts");
+        expect(result.relations).toContainEqual(
+          expect.objectContaining({ type: "extends", sourceSymbol: "SearchEngine", targetRef: "BaseEngine" })
+        );
+      });
+    });
+
+    describe("implements", () => {
+      it("extracts TypeScript implements", async () => {
+        const code = `class Store implements IStore {}`;
+        const result = await extractSymbolsAndRelations(code, "test.ts");
+        expect(result.relations).toContainEqual(
+          expect.objectContaining({ type: "implements", sourceSymbol: "Store", targetRef: "IStore" })
+        );
+      });
+    });
+
+    describe("calls filtering", () => {
+      it("only captures calls to imported symbols", async () => {
+        const code = `import { foo } from './mod';\nfunction bar() { foo(); console.log('hi'); }`;
+        const result = await extractSymbolsAndRelations(code, "test.ts");
+        const calls = result.relations.filter(r => r.type === "calls");
+        expect(calls).toContainEqual(
+          expect.objectContaining({ type: "calls", targetSymbol: "foo" })
+        );
+        // console.log should NOT be in calls
+        expect(calls.find(c => c.targetSymbol === "log")).toBeUndefined();
+      });
+    });
+  });
 });

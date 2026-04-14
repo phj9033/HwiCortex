@@ -523,12 +523,214 @@ export async function extractSymbolsAndRelations(
       symbols.push({ name, kind, line });
     }
 
+    // Extract relations
+    const relations: AstRelation[] = [];
+    const importedSymbols = new Set<string>();
+
+    // Walk the tree to extract relations based on language
+    const rootNode = tree.rootNode;
+
+    if (language === "typescript" || language === "tsx" || language === "javascript") {
+      // Extract TypeScript/JavaScript imports
+      for (const importNode of rootNode.descendantsOfType("import_statement")) {
+        // Get the source string (e.g., './store' or 'path')
+        const sourceNode = importNode.childForFieldName("source");
+        if (!sourceNode) continue;
+
+        const targetRef = sourceNode.text.slice(1, -1); // Remove quotes
+
+        // Extract import clause (first named child)
+        const importClause = importNode.namedChildren.find(n => n.type === "import_clause");
+        if (importClause) {
+          // Default import (direct identifier child of import_clause)
+          const defaultId = importClause.namedChildren.find(n => n.type === "identifier");
+          if (defaultId) {
+            const targetSymbol = defaultId.text;
+            importedSymbols.add(targetSymbol);
+            relations.push({ type: "imports", targetRef, targetSymbol });
+          }
+
+          // Named imports
+          const namedImports = importClause.descendantsOfType("named_imports")[0];
+          if (namedImports) {
+            for (const specifier of namedImports.descendantsOfType("import_specifier")) {
+              const nameNode = specifier.childForFieldName("name");
+              if (nameNode) {
+                const targetSymbol = nameNode.text;
+                importedSymbols.add(targetSymbol);
+                relations.push({ type: "imports", targetRef, targetSymbol });
+              }
+            }
+          }
+        }
+      }
+
+      // Extract class extends and implements
+      for (const classNode of rootNode.descendantsOfType("class_declaration")) {
+        const className = classNode.childForFieldName("name")?.text;
+        if (!className) continue;
+
+        // Extract extends
+        const extendsClause = classNode.descendantsOfType("extends_clause")[0];
+        if (extendsClause) {
+          const typeRef = extendsClause.namedChildren[0];
+          if (typeRef) {
+            relations.push({
+              type: "extends",
+              sourceSymbol: className,
+              targetRef: typeRef.text,
+            });
+          }
+        }
+
+        // Extract implements
+        const implementsClause = classNode.descendantsOfType("implements_clause")[0];
+        if (implementsClause) {
+          // Get all type references in implements clause
+          for (const typeRef of implementsClause.namedChildren) {
+            if (typeRef.type === "type_identifier" || typeRef.type === "identifier") {
+              relations.push({
+                type: "implements",
+                sourceSymbol: className,
+                targetRef: typeRef.text,
+              });
+            }
+          }
+        }
+      }
+
+      // Extract calls to imported symbols
+      for (const callNode of rootNode.descendantsOfType("call_expression")) {
+        const functionNode = callNode.childForFieldName("function");
+        if (!functionNode) continue;
+
+        // Handle direct identifier calls (e.g., foo())
+        if (functionNode.type === "identifier") {
+          const callee = functionNode.text;
+          if (importedSymbols.has(callee)) {
+            relations.push({
+              type: "calls",
+              targetSymbol: callee,
+              targetRef: callee,
+            });
+          }
+        }
+        // Handle member expression calls (e.g., obj.method())
+        else if (functionNode.type === "member_expression") {
+          const objectNode = functionNode.childForFieldName("object");
+          if (objectNode && objectNode.type === "identifier") {
+            const obj = objectNode.text;
+            if (importedSymbols.has(obj)) {
+              const propertyNode = functionNode.childForFieldName("property");
+              if (propertyNode) {
+                relations.push({
+                  type: "calls",
+                  targetSymbol: propertyNode.text,
+                  targetRef: obj,
+                });
+              }
+            }
+          }
+        }
+      }
+    } else if (language === "python") {
+      // Extract Python from-imports
+      for (const importNode of rootNode.descendantsOfType("import_from_statement")) {
+        // Get the module path (e.g., .store or package.module)
+        const moduleNode = importNode.childForFieldName("module_name");
+        let targetRef = "";
+
+        if (moduleNode) {
+          targetRef = moduleNode.text;
+        }
+
+        if (!targetRef) continue;
+
+        // Extract imported names from the 'name' field
+        const nameNode = importNode.childForFieldName("name");
+        if (nameNode) {
+          // Single import (dotted_name)
+          if (nameNode.type === "dotted_name") {
+            const targetSymbol = nameNode.text;
+            importedSymbols.add(targetSymbol);
+            relations.push({ type: "imports", targetRef, targetSymbol });
+          }
+          // Multiple imports (will need to handle this differently)
+        }
+
+        // Also check for aliased imports
+        for (const aliasNode of importNode.descendantsOfType("aliased_import")) {
+          const aliasNameNode = aliasNode.childForFieldName("name");
+          if (aliasNameNode) {
+            const targetSymbol = aliasNameNode.text;
+            importedSymbols.add(targetSymbol);
+            relations.push({ type: "imports", targetRef, targetSymbol });
+          }
+        }
+      }
+
+      // Extract Python regular imports (e.g., import os)
+      for (const importNode of rootNode.descendantsOfType("import_statement")) {
+        for (const dottedName of importNode.descendantsOfType("dotted_name")) {
+          const targetRef = dottedName.text;
+          const targetSymbol = targetRef.split(".")[0]; // First part is the symbol
+          importedSymbols.add(targetSymbol);
+          relations.push({ type: "imports", targetRef, targetSymbol });
+        }
+      }
+
+      // Extract calls to imported symbols (Python)
+      for (const callNode of rootNode.descendantsOfType("call")) {
+        const functionNode = callNode.childForFieldName("function");
+        if (!functionNode) continue;
+
+        if (functionNode.type === "identifier") {
+          const callee = functionNode.text;
+          if (importedSymbols.has(callee)) {
+            relations.push({
+              type: "calls",
+              targetSymbol: callee,
+              targetRef: callee,
+            });
+          }
+        }
+      }
+    } else if (language === "go") {
+      // Extract Go imports (minimal implementation)
+      for (const importNode of rootNode.descendantsOfType("import_declaration")) {
+        for (const spec of importNode.descendantsOfType("import_spec")) {
+          const pathNode = spec.childForFieldName("path");
+          if (pathNode) {
+            const targetRef = pathNode.text.slice(1, -1); // Remove quotes
+            const parts = targetRef.split("/");
+            const targetSymbol = parts[parts.length - 1];
+            importedSymbols.add(targetSymbol);
+            relations.push({ type: "imports", targetRef, targetSymbol });
+          }
+        }
+      }
+    } else if (language === "rust") {
+      // Extract Rust use declarations (minimal implementation)
+      for (const useNode of rootNode.descendantsOfType("use_declaration")) {
+        const text = useNode.text;
+        // Simple extraction: extract the last part after ::
+        const parts = text.split("::");
+        if (parts.length > 0) {
+          const lastPart = parts[parts.length - 1].replace(/[;{}\s]/g, "");
+          if (lastPart) {
+            importedSymbols.add(lastPart);
+            relations.push({ type: "imports", targetRef: text, targetSymbol: lastPart });
+          }
+        }
+      }
+    }
+
     tree.delete();
     parser.delete();
 
     return {
       symbols,
-      relations: [], // Phase 3
+      relations,
     };
   } catch (err) {
     console.warn(
