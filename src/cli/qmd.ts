@@ -110,6 +110,7 @@ import { handleWatch } from "./watch.js";
 import { handleRebuild } from "./rebuild.js";
 import { handleWiki } from "./wiki.js";
 import { bumpCount } from "../wiki.js";
+import { handleGraph, handlePath, handleRelated, handleSymbol, handleClusters } from "./graph.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -3458,6 +3459,56 @@ if (isMain) {
       let wikiStore: ReturnType<typeof createStore> | undefined;
       try { wikiStore = getStore(); } catch { /* store unavailable, proceed without FTS */ }
       await handleWiki(cli.args, cli.values, wikiStore);
+      break;
+    }
+
+    case "graph": {
+      const store = getStore();
+      const subcmd = cli.args[0];
+      const opts = { collection: cli.values.collection as string | undefined };
+      if (subcmd === "clusters") {
+        console.log(handleClusters(store.db, opts));
+      } else if (cli.values.obsidian) {
+        console.error("Obsidian graph export not yet implemented (Task 9)");
+      } else if (subcmd) {
+        console.log(handleGraph(store.db, subcmd, opts));
+      } else {
+        console.error("Usage: hwicortex graph <file> | clusters [--collection]");
+        process.exit(1);
+      }
+      break;
+    }
+
+    case "path": {
+      if (cli.args.length < 2) {
+        console.error("Usage: hwicortex path <fileA> <fileB>");
+        process.exit(1);
+      }
+      const store = getStore();
+      const opts = { collection: cli.values.collection as string | undefined };
+      console.log(handlePath(store.db, cli.args[0]!, cli.args[1]!, opts));
+      break;
+    }
+
+    case "related": {
+      if (!cli.args[0]) {
+        console.error("Usage: hwicortex related <file>");
+        process.exit(1);
+      }
+      const store = getStore();
+      const opts = { collection: cli.values.collection as string | undefined };
+      console.log(handleRelated(store.db, cli.args[0], opts));
+      break;
+    }
+
+    case "symbol": {
+      if (!cli.args[0]) {
+        console.error("Usage: hwicortex symbol <name>");
+        process.exit(1);
+      }
+      const store = getStore();
+      const opts = { collection: cli.values.collection as string | undefined };
+      console.log(handleSymbol(store.db, cli.args[0], opts));
       break;
     }
 
