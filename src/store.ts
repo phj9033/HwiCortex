@@ -35,6 +35,8 @@ import type {
   CollectionConfig,
   ContextMap,
 } from "./collections.js";
+import { detectLanguage, extractSymbolsAndRelations } from "./ast.js";
+import { saveSymbols, saveRelations, resolveTargetHashes, detectClusters, nameClusters, saveClusters } from "./graph.js";
 
 // =============================================================================
 // Configuration
@@ -1258,6 +1260,18 @@ export async function reindexCollection(
       if (docId) await upsertFTS(db, docId, collectionName + "/" + path, title, content);
     }
 
+    // Graph extraction: extract symbols and relations from AST-supported files
+    if (detectLanguage(relativeFile) !== null) {
+      const existingSymbols = db.prepare("SELECT 1 FROM symbols WHERE hash = ? LIMIT 1").get(hash);
+      if (!existingSymbols) {
+        const analysis = await extractSymbolsAndRelations(content, relativeFile);
+        if (analysis.symbols.length > 0 || analysis.relations.length > 0) {
+          saveSymbols(db, hash, analysis.symbols);
+          saveRelations(db, hash, analysis.relations);
+        }
+      }
+    }
+
     processed++;
     options?.onProgress?.({ file: relativeFile, current: processed, total });
   }
@@ -1270,6 +1284,25 @@ export async function reindexCollection(
       deactivateDocument(db, collectionName, path);
       removed++;
     }
+  }
+
+  // Cleanup orphaned graph data for deactivated documents
+  const deactivatedHashes = db.prepare(`
+    SELECT DISTINCT hash FROM documents
+    WHERE collection = ? AND active = 0
+    AND hash NOT IN (SELECT hash FROM documents WHERE active = 1)
+  `).all(collectionName) as { hash: string }[];
+
+  for (const { hash } of deactivatedHashes) {
+    db.prepare("DELETE FROM symbols WHERE hash = ?").run(hash);
+    db.prepare("DELETE FROM relations WHERE source_hash = ?").run(hash);
+  }
+
+  // Resolve target hashes and run clustering
+  resolveTargetHashes(db, collectionName);
+  const clusters = detectClusters(db, collectionName);
+  if (clusters.length > 0) {
+    saveClusters(db, collectionName, nameClusters(db, clusters));
   }
 
   const orphanedCleaned = cleanupOrphanedContent(db);
