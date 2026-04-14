@@ -1,10 +1,11 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { execSync } from "child_process";
 import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { tmpdir } from "os";
+import { fileURLToPath } from "url";
 
-const PROJECT_DIR = "/Users/ad03159868/Downloads/Claude_lab/hwicortex";
+const PROJECT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function qmd(args: string, vaultDir: string): string {
   return execSync(

@@ -49,6 +49,7 @@ import {
   STRONG_SIGNAL_MIN_SCORE,
   STRONG_SIGNAL_MIN_GAP,
   generateEmbeddings,
+  upsertFTS,
   type Store,
   type DocumentResult,
   type SearchResult,
@@ -167,7 +168,14 @@ async function insertTestDocument(
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(collectionName, path, title, hash, now, now, active);
 
-  return Number(result.lastInsertRowid);
+  const docId = Number(result.lastInsertRowid);
+
+  // Populate FTS index
+  if (active) {
+    await upsertFTS(db, docId, collectionName + "/" + path, title, body);
+  }
+
+  return docId;
 }
 
 /** Sync YAML config file to SQLite store_collections in the current test store */
@@ -1107,7 +1115,7 @@ describe("FTS Search", () => {
       body: "The quick brown fox jumps over the lazy dog",
     });
 
-    const results = store.searchFTS("nonexistent-term-xyz", 10);
+    const results = await store.searchFTS("nonexistent-term-xyz", 10);
     expect(results).toHaveLength(0);
 
     await cleanupTestDb(store);
@@ -1123,7 +1131,7 @@ describe("FTS Search", () => {
       displayPath: "test/doc1.md",
     });
 
-    const results = store.searchFTS("fox", 10);
+    const results = await store.searchFTS("fox", 10);
     expect(results.length).toBeGreaterThan(0);
     expect(results[0]!.displayPath).toBe(`${collectionName}/test/doc1.md`);
     expect(results[0]!.filepath).toBe(`qmd://${collectionName}/test/doc1.md`);
@@ -1152,7 +1160,7 @@ describe("FTS Search", () => {
       displayPath: "test/title.md",
     });
 
-    const results = store.searchFTS("fox", 10);
+    const results = await store.searchFTS("fox", 10);
     // Both documents contain "fox" in the body now, so we should get 2 results
     expect(results.length).toBe(2);
     // Title/name match should rank higher due to BM25 weights
@@ -1181,7 +1189,7 @@ describe("FTS Search", () => {
       displayPath: "test/title-match.md",
     });
 
-    const results = store.searchFTS("quantum", 10);
+    const results = await store.searchFTS("quantum", 10);
     expect(results.length).toBe(2);
     // Title-match doc should rank higher due to BM25 column weights boosting title
     expect(results[0]!.displayPath).toBe(`${collectionName}/test/title-match.md`);
@@ -1202,7 +1210,7 @@ describe("FTS Search", () => {
       });
     }
 
-    const results = store.searchFTS("common keyword", 3);
+    const results = await store.searchFTS("common keyword", 3);
     expect(results).toHaveLength(3);
 
     await cleanupTestDb(store);
@@ -1225,11 +1233,11 @@ describe("FTS Search", () => {
       displayPath: "doc2.md",
     });
 
-    const allResults = store.searchFTS("searchable", 10);
+    const allResults = await store.searchFTS("searchable", 10);
     expect(allResults).toHaveLength(2);
 
     // Filter by collection name
-    const filtered = store.searchFTS("searchable", 10, collection1);
+    const filtered = await store.searchFTS("searchable", 10, collection1);
     expect(filtered).toHaveLength(1);
     expect(filtered[0]!.displayPath).toBe(`${collection1}/doc1.md`);
 
@@ -1246,7 +1254,7 @@ describe("FTS Search", () => {
     });
 
     // Should not throw on special characters
-    const results = store.searchFTS("foo(bar)", 10);
+    const results = await store.searchFTS("foo(bar)", 10);
     // Results may vary based on FTS5 handling
     expect(Array.isArray(results)).toBe(true);
 
@@ -1287,7 +1295,7 @@ describe("FTS Search", () => {
       displayPath: "test/weak.md",
     });
 
-    const results = store.searchFTS("alpha", 10);
+    const results = await store.searchFTS("alpha", 10);
     expect(results.length).toBe(2);
 
     // Verify score direction: stronger match (title + body) should score HIGHER
@@ -1325,7 +1333,7 @@ describe("FTS Search", () => {
       displayPath: "test/weak.md",
     });
 
-    const allResults = store.searchFTS("kubernetes", 10);
+    const allResults = await store.searchFTS("kubernetes", 10);
     expect(allResults.length).toBe(2);
 
     // With a minScore threshold, strong match should survive, weak should be filterable
@@ -1361,7 +1369,7 @@ describe("FTS Search", () => {
       active: 0,
     });
 
-    const results = store.searchFTS("findme", 10);
+    const results = await store.searchFTS("findme", 10);
     expect(results).toHaveLength(1);
     expect(results[0]!.displayPath).toBe(`${collectionName}/test/active.md`);
     expect(results[0]!.filepath).toBe(`qmd://${collectionName}/test/active.md`);
@@ -1396,7 +1404,7 @@ describe("FTS Search", () => {
       displayPath: "notes/misc.md",
     });
 
-    const results = store.searchFTS("zephyr", 10);
+    const results = await store.searchFTS("zephyr", 10);
     expect(results.length).toBe(2);
 
     const topScore = results[0]!.score;
@@ -2274,7 +2282,7 @@ describe("Integration", () => {
     });
 
     // Search
-    const searchResults = store.searchFTS("project", 10);
+    const searchResults = await store.searchFTS("project", 10);
     expect(searchResults.length).toBe(2);
 
     // Status - SKIPPED: getStatus() has bug (queries non-existent collections table)
@@ -2319,8 +2327,8 @@ describe("Integration", () => {
     });
 
     // Each store should only see its own documents
-    const results1 = store1.searchFTS("unique", 10);
-    const results2 = store2.searchFTS("different", 10);
+    const results1 = await store1.searchFTS("unique", 10);
+    const results2 = await store2.searchFTS("different", 10);
 
     expect(results1).toHaveLength(1);
     expect(results1[0]!.displayPath).toBe("store1/doc.md");
@@ -2331,8 +2339,8 @@ describe("Integration", () => {
     expect(results2[0]!.filepath).toBe("qmd://store2/doc.md");
 
     // Cross-check: store1 shouldn't find store2's content
-    const cross1 = store1.searchFTS("different", 10);
-    const cross2 = store2.searchFTS("unique", 10);
+    const cross1 = await store1.searchFTS("different", 10);
+    const cross2 = await store2.searchFTS("unique", 10);
 
     expect(cross1).toHaveLength(0);
     expect(cross2).toHaveLength(0);
@@ -2571,7 +2579,7 @@ describe("Edge Cases", () => {
   test("handles empty database gracefully", async () => {
     const store = await createTestStore();
 
-    const searchResults = store.searchFTS("anything", 10);
+    const searchResults = await store.searchFTS("anything", 10);
     expect(searchResults).toHaveLength(0);
 
     // SKIPPED: getStatus() has bug (queries non-existent collections table)
@@ -2596,7 +2604,7 @@ describe("Edge Cases", () => {
       displayPath: "long.md",
     });
 
-    const results = store.searchFTS("word", 10);
+    const results = await store.searchFTS("word", 10);
     expect(results).toHaveLength(1);
 
     await cleanupTestDb(store);
@@ -2614,7 +2622,7 @@ describe("Edge Cases", () => {
     });
 
     // Should be searchable
-    const results = store.searchFTS("日本語", 10);
+    const results = await store.searchFTS("日本語", 10);
     expect(results.length).toBeGreaterThan(0);
 
     // Should retrieve correctly
@@ -2661,7 +2669,7 @@ describe("Edge Cases", () => {
     await Promise.all(inserts);
 
     // All should be searchable
-    const results = store.searchFTS("searchterm", 20);
+    const results = await store.searchFTS("searchterm", 20);
     expect(results).toHaveLength(10);
 
     await cleanupTestDb(store);

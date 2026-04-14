@@ -499,32 +499,8 @@ describe("searchLex (BM25)", () => {
       },
     });
 
-    // Index documents manually using internal store
-    const now = new Date().toISOString();
-    const { internal } = store;
-    const fs = require("fs");
-
-    // Index docs collection
-    for (const file of ["readme.md", "auth.md", "api.md"]) {
-      const fullPath = join(docsDir, file);
-      const content = fs.readFileSync(fullPath, "utf-8");
-      const hash = require("crypto").createHash("sha256").update(content).digest("hex");
-      const title = content.match(/^#\s+(.+)/m)?.[1] || file;
-
-      internal.insertContent(hash, content, now);
-      internal.insertDocument("docs", `qmd://docs/${file}`, title, hash, now, now);
-    }
-
-    // Index notes collection
-    for (const file of ["meeting-2025-01.md", "meeting-2025-02.md", "ideas.md"]) {
-      const fullPath = join(notesDir, file);
-      const content = fs.readFileSync(fullPath, "utf-8");
-      const hash = require("crypto").createHash("sha256").update(content).digest("hex");
-      const title = content.match(/^#\s+(.+)/m)?.[1] || file;
-
-      internal.insertContent(hash, content, now);
-      internal.insertDocument("notes", `qmd://notes/${file}`, title, hash, now, now);
-    }
+    // Index documents via store.update() which handles FTS population
+    await store.update();
   });
 
   afterAll(async () => {

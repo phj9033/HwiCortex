@@ -131,35 +131,35 @@ describe("searchFTS source_type filter", () => {
     });
   });
 
-  test("returns all results when no sourceType filter is provided", () => {
-    const results = searchFTS(db, "quantum");
+  test("returns all results when no sourceType filter is provided", async () => {
+    const results = await searchFTS(db, "quantum");
     expect(results.length).toBe(3);
   });
 
-  test("filters by sourceType='knowledge'", () => {
-    const results = searchFTS(db, "quantum", 20, undefined, "knowledge");
+  test("filters by sourceType='knowledge'", async () => {
+    const results = await searchFTS(db, "quantum", 20, undefined, "knowledge");
     expect(results.length).toBe(1);
     expect(results[0]!.title).toBe("Quantum Knowledge");
   });
 
-  test("filters by sourceType='docs'", () => {
-    const results = searchFTS(db, "quantum", 20, undefined, "docs");
+  test("filters by sourceType='docs'", async () => {
+    const results = await searchFTS(db, "quantum", 20, undefined, "docs");
     expect(results.length).toBe(1);
     expect(results[0]!.title).toBe("Quantum Docs");
   });
 
-  test("filters by sourceType='sessions'", () => {
-    const results = searchFTS(db, "quantum", 20, undefined, "sessions");
+  test("filters by sourceType='sessions'", async () => {
+    const results = await searchFTS(db, "quantum", 20, undefined, "sessions");
     expect(results.length).toBe(1);
     expect(results[0]!.title).toBe("Quantum Session");
   });
 
-  test("returns empty when sourceType matches no documents", () => {
-    const results = searchFTS(db, "quantum", 20, undefined, "nonexistent");
+  test("returns empty when sourceType matches no documents", async () => {
+    const results = await searchFTS(db, "quantum", 20, undefined, "nonexistent");
     expect(results.length).toBe(0);
   });
 
-  test("combines collection and sourceType filters", () => {
+  test("combines collection and sourceType filters", async () => {
     // Add a doc in a different collection with same source_type
     insertContent(db, "hash-other", "Quantum stuff in other collection");
     insertDocument(db, "othercol", "other.md", "Quantum Other", "hash-other", now, now, {
@@ -167,7 +167,7 @@ describe("searchFTS source_type filter", () => {
     });
 
     // Filter by both collection and sourceType
-    const results = searchFTS(db, "quantum", 20, "mycol", "knowledge");
+    const results = await searchFTS(db, "quantum", 20, "mycol", "knowledge");
     expect(results.length).toBe(1);
     expect(results[0]!.title).toBe("Quantum Knowledge");
   });

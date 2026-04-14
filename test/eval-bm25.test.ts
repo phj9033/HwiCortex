@@ -17,6 +17,8 @@ import {
   searchFTS,
   insertDocument,
   insertContent,
+  upsertFTS,
+  getDocumentId,
 } from "../src/store";
 
 // Set INDEX_PATH before importing store to prevent using global index
@@ -70,14 +72,14 @@ function matchesExpected(filepath: string, expectedDoc: string): boolean {
   return filepath.toLowerCase().includes(expectedDoc);
 }
 
-function calcHitRate(
+async function calcHitRate(
   queries: typeof evalQueries,
-  searchFn: (query: string) => { filepath: string }[],
+  searchFn: (query: string) => Promise<{ filepath: string }[]>,
   topK: number
-): number {
+): Promise<number> {
   let hits = 0;
   for (const { query, expectedDoc } of queries) {
-    const results = searchFn(query).slice(0, topK);
+    const results = (await searchFn(query)).slice(0, topK);
     if (results.some(r => matchesExpected(r.filepath, expectedDoc))) hits++;
   }
   return hits / queries.length;
@@ -87,7 +89,7 @@ describe("BM25 Search (FTS)", () => {
   let store: ReturnType<typeof createStore>;
   let db: Database;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     store = createStore();
     db = store.db;
 
@@ -103,6 +105,8 @@ describe("BM25 Search (FTS)", () => {
 
       insertContent(db, hash, content, now);
       insertDocument(db, "eval-docs", file, title, hash, now, now);
+      const docId = getDocumentId(db, "eval-docs", file);
+      if (docId) await upsertFTS(db, docId, "eval-docs/" + file, title, content);
     }
   });
 
@@ -110,26 +114,26 @@ describe("BM25 Search (FTS)", () => {
     store.close();
   });
 
-  test("easy queries: ≥80% Hit@3", () => {
+  test("easy queries: ≥80% Hit@3", async () => {
     const easyQueries = evalQueries.filter(q => q.difficulty === "easy");
-    const hitRate = calcHitRate(easyQueries, q => searchFTS(db, q, 5), 3);
+    const hitRate = await calcHitRate(easyQueries, q => searchFTS(db, q, 5), 3);
     expect(hitRate).toBeGreaterThanOrEqual(0.8);
   });
 
-  test("medium queries: ≥15% Hit@3 (BM25 struggles with semantic)", () => {
+  test("medium queries: ≥15% Hit@3 (BM25 struggles with semantic)", async () => {
     const mediumQueries = evalQueries.filter(q => q.difficulty === "medium");
-    const hitRate = calcHitRate(mediumQueries, q => searchFTS(db, q, 5), 3);
+    const hitRate = await calcHitRate(mediumQueries, q => searchFTS(db, q, 5), 3);
     expect(hitRate).toBeGreaterThanOrEqual(0.15);
   });
 
-  test("hard queries: ≥15% Hit@5 (BM25 baseline)", () => {
+  test("hard queries: ≥15% Hit@5 (BM25 baseline)", async () => {
     const hardQueries = evalQueries.filter(q => q.difficulty === "hard");
-    const hitRate = calcHitRate(hardQueries, q => searchFTS(db, q, 5), 5);
+    const hitRate = await calcHitRate(hardQueries, q => searchFTS(db, q, 5), 5);
     expect(hitRate).toBeGreaterThanOrEqual(0.15);
   });
 
-  test("overall Hit@3 ≥40% (BM25 baseline)", () => {
-    const hitRate = calcHitRate(evalQueries, q => searchFTS(db, q, 5), 3);
+  test("overall Hit@3 ≥40% (BM25 baseline)", async () => {
+    const hitRate = await calcHitRate(evalQueries, q => searchFTS(db, q, 5), 3);
     expect(hitRate).toBeGreaterThanOrEqual(0.4);
   });
 });

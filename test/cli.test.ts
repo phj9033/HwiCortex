@@ -230,9 +230,9 @@ describe("CLI Help", () => {
     const { stdout, exitCode } = await runQmd(["--help"]);
     expect(exitCode).toBe(0);
     expect(stdout).toContain("Usage:");
-    expect(stdout).toContain("qmd collection add");
-    expect(stdout).toContain("qmd search");
-    expect(stdout).toContain("qmd skill show/install");
+    expect(stdout).toContain("hwicortex collection add");
+    expect(stdout).toContain("hwicortex search");
+    expect(stdout).toContain("hwicortex skill show/install");
   });
 
   test("shows help with no arguments", async () => {
@@ -268,7 +268,7 @@ describe("CLI Skill Commands", () => {
   test("shows skill help with -h", async () => {
     const { stdout, exitCode } = await runQmd(["skill", "-h"]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Usage: qmd skill <show|install> [options]");
+    expect(stdout).toContain("Usage: hwicortex skill <show|install> [options]");
     expect(stdout).toContain("install");
     expect(stdout).toContain("--global");
   });

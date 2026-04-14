@@ -34,6 +34,8 @@ import {
   chunkDocumentByTokens,
   reciprocalRankFusion,
   DEFAULT_EMBED_MODEL,
+  upsertFTS,
+  getDocumentId,
   type RankedResult,
 } from "../src/store";
 import { getDefaultLlamaCpp, formatDocForEmbedding, disposeDefaultLlamaCpp } from "../src/llm";
@@ -84,14 +86,14 @@ function matchesExpected(filepath: string, expectedDoc: string): boolean {
 }
 
 // Helper to calculate hit rate
-function calcHitRate(
+async function calcHitRate(
   queries: typeof evalQueries,
-  searchFn: (query: string) => { filepath: string }[],
+  searchFn: (query: string) => Promise<{ filepath: string }[]>,
   topK: number
-): number {
+): Promise<number> {
   let hits = 0;
   for (const { query, expectedDoc } of queries) {
-    const results = searchFn(query).slice(0, topK);
+    const results = (await searchFn(query)).slice(0, topK);
     if (results.some(r => matchesExpected(r.filepath, expectedDoc))) hits++;
   }
   return hits / queries.length;
@@ -105,7 +107,7 @@ describe("BM25 Search (FTS)", () => {
   let store: ReturnType<typeof createStore>;
   let db: Database;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     store = createStore();
     db = store.db;
 
@@ -121,6 +123,8 @@ describe("BM25 Search (FTS)", () => {
 
       insertContent(db, hash, content, now);
       insertDocument(db, "eval-docs", file, title, hash, now, now);
+      const docId = getDocumentId(db, "eval-docs", file);
+      if (docId) await upsertFTS(db, docId, "eval-docs/" + file, title, content);
     }
   });
 
@@ -128,26 +132,26 @@ describe("BM25 Search (FTS)", () => {
     store.close();
   });
 
-  test("easy queries: ≥80% Hit@3", () => {
+  test("easy queries: ≥80% Hit@3", async () => {
     const easyQueries = evalQueries.filter(q => q.difficulty === "easy");
-    const hitRate = calcHitRate(easyQueries, q => searchFTS(db, q, 5), 3);
+    const hitRate = await calcHitRate(easyQueries, q => searchFTS(db, q, 5), 3);
     expect(hitRate).toBeGreaterThanOrEqual(0.8);
   });
 
-  test("medium queries: ≥15% Hit@3 (BM25 struggles with semantic)", () => {
+  test("medium queries: ≥15% Hit@3 (BM25 struggles with semantic)", async () => {
     const mediumQueries = evalQueries.filter(q => q.difficulty === "medium");
-    const hitRate = calcHitRate(mediumQueries, q => searchFTS(db, q, 5), 3);
+    const hitRate = await calcHitRate(mediumQueries, q => searchFTS(db, q, 5), 3);
     expect(hitRate).toBeGreaterThanOrEqual(0.15);
   });
 
-  test("hard queries: ≥15% Hit@5 (BM25 baseline)", () => {
+  test("hard queries: ≥15% Hit@5 (BM25 baseline)", async () => {
     const hardQueries = evalQueries.filter(q => q.difficulty === "hard");
-    const hitRate = calcHitRate(hardQueries, q => searchFTS(db, q, 5), 5);
+    const hitRate = await calcHitRate(hardQueries, q => searchFTS(db, q, 5), 5);
     expect(hitRate).toBeGreaterThanOrEqual(0.15);
   });
 
-  test("overall Hit@3 ≥40% (BM25 baseline)", () => {
-    const hitRate = calcHitRate(evalQueries, q => searchFTS(db, q, 5), 3);
+  test("overall Hit@3 ≥40% (BM25 baseline)", async () => {
+    const hitRate = await calcHitRate(evalQueries, q => searchFTS(db, q, 5), 3);
     expect(hitRate).toBeGreaterThanOrEqual(0.4);
   });
 });
@@ -295,7 +299,7 @@ describe.skipIf(!!process.env.CI)("Hybrid Search (RRF)", () => {
     const rankedLists: RankedResult[][] = [];
 
     // FTS results
-    const ftsResults = searchFTS(db, query, 20);
+    const ftsResults = await searchFTS(db, query, 20);
     if (ftsResults.length > 0) {
       rankedLists.push(ftsResults.map(r => ({
         file: r.filepath,
@@ -373,7 +377,7 @@ describe.skipIf(!!process.env.CI)("Hybrid Search (RRF)", () => {
       if (hybridResults.slice(0, 3).some(r => matchesExpected(r.file, expectedDoc))) hybridHits++;
 
       // BM25 results for comparison
-      const bm25Results = searchFTS(db, query, 5);
+      const bm25Results = await searchFTS(db, query, 5);
       if (bm25Results.slice(0, 3).some(r => matchesExpected(r.filepath, expectedDoc))) bm25Hits++;
 
       // Vector results for comparison

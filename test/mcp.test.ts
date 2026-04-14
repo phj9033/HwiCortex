@@ -115,7 +115,10 @@ function initTestDatabase(db: Database): void {
       ignore_patterns TEXT,
       include_by_default INTEGER DEFAULT 1,
       update_command TEXT,
-      context TEXT
+      context TEXT,
+      type TEXT DEFAULT 'static',
+      parser TEXT,
+      watch_dir TEXT
     )
   `);
 
@@ -283,26 +286,26 @@ describe("MCP Server", () => {
   // ===========================================================================
 
   describe("searchFTS (BM25 keyword search)", () => {
-    test("returns results for matching query", () => {
-      const results = searchFTS(testDb, "readme", 10);
+    test("returns results for matching query", async () => {
+      const results = await searchFTS(testDb, "readme", 10);
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]!.displayPath).toBe("docs/readme.md");
     });
 
-    test("returns empty for non-matching query", () => {
-      const results = searchFTS(testDb, "xyznonexistent", 10);
+    test("returns empty for non-matching query", async () => {
+      const results = await searchFTS(testDb, "xyznonexistent", 10);
       expect(results.length).toBe(0);
     });
 
-    test("respects limit parameter", () => {
-      const results = searchFTS(testDb, "meeting", 1);
+    test("respects limit parameter", async () => {
+      const results = await searchFTS(testDb, "meeting", 1);
       expect(results.length).toBe(1);
     });
 
     // Note: Collection filtering tests removed - collections are now managed in YAML, not DB
 
-    test("formats results as structured content", () => {
-      const results = searchFTS(testDb, "api", 10);
+    test("formats results as structured content", async () => {
+      const results = await searchFTS(testDb, "api", 10);
       const filtered = results.map(r => ({
         file: r.displayPath,
         title: r.title,
@@ -395,7 +398,7 @@ describe("MCP Server", () => {
       const rankedLists: RankedResult[][] = [];
 
       // Original query → FTS (probe)
-      const probeFts = searchFTS(testDb, query, 20);
+      const probeFts = await searchFTS(testDb, query, 20);
       if (probeFts.length > 0) {
         rankedLists.push(probeFts.map(r => ({
           file: r.filepath, displayPath: r.displayPath,
@@ -406,7 +409,7 @@ describe("MCP Server", () => {
       // Expanded queries → route by type: lex→FTS, vec/hyde skipped (no vectors in test)
       for (const q of expanded) {
         if (q.type === 'lex') {
-          const ftsResults = searchFTS(testDb, q.query, 20);
+          const ftsResults = await searchFTS(testDb, q.query, 20);
           if (ftsResults.length > 0) {
             rankedLists.push(ftsResults.map(r => ({
               file: r.filepath, displayPath: r.displayPath,
@@ -768,30 +771,30 @@ describe("MCP Server", () => {
   // ===========================================================================
 
   describe("edge cases", () => {
-    test("handles empty query", () => {
-      const results = searchFTS(testDb, "", 10);
+    test("handles empty query", async () => {
+      const results = await searchFTS(testDb, "", 10);
       expect(results.length).toBe(0);
     });
 
-    test("handles special characters in query", () => {
-      const results = searchFTS(testDb, "project's", 10);
+    test("handles special characters in query", async () => {
+      const results = await searchFTS(testDb, "project's", 10);
       // Should not throw
       expect(Array.isArray(results)).toBe(true);
     });
 
-    test("handles unicode in query", () => {
-      const results = searchFTS(testDb, "文档", 10);
+    test("handles unicode in query", async () => {
+      const results = await searchFTS(testDb, "文档", 10);
       expect(Array.isArray(results)).toBe(true);
     });
 
-    test("handles very long query", () => {
+    test("handles very long query", async () => {
       const longQuery = "documentation ".repeat(100);
-      const results = searchFTS(testDb, longQuery, 10);
+      const results = await searchFTS(testDb, longQuery, 10);
       expect(Array.isArray(results)).toBe(true);
     });
 
-    test("handles query with only stopwords", () => {
-      const results = searchFTS(testDb, "the and or", 10);
+    test("handles query with only stopwords", async () => {
+      const results = await searchFTS(testDb, "the and or", 10);
       expect(Array.isArray(results)).toBe(true);
     });
 
@@ -824,8 +827,8 @@ describe("MCP Server", () => {
       expect(segments).toContain("%20"); // Spaces encoded
     });
 
-    test("search results have correct structure for structuredContent", () => {
-      const results = searchFTS(testDb, "readme", 5);
+    test("search results have correct structure for structuredContent", async () => {
+      const results = await searchFTS(testDb, "readme", 5);
       const structured = results.map(r => ({
         file: r.displayPath,
         title: r.title,
