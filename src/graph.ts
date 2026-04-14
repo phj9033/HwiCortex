@@ -1,5 +1,5 @@
-import type Database from "better-sqlite3";
-import type { AstSymbol, AstRelation } from "./ast";
+import type { Database } from "./db.js";
+import type { AstSymbol, AstRelation } from "./ast.js";
 
 // --- Types ---
 export interface RelationRow {
@@ -43,7 +43,7 @@ export interface NamedCluster {
 }
 
 // --- Storage ---
-export function saveSymbols(db: Database.Database, hash: string, symbols: AstSymbol[]): void {
+export function saveSymbols(db: Database, hash: string, symbols: AstSymbol[]): void {
   db.prepare("DELETE FROM symbols WHERE hash = ?").run(hash);
   const insert = db.prepare("INSERT INTO symbols (hash, name, kind, line) VALUES (?, ?, ?, ?)");
   for (const s of symbols) {
@@ -51,7 +51,7 @@ export function saveSymbols(db: Database.Database, hash: string, symbols: AstSym
   }
 }
 
-export function saveRelations(db: Database.Database, hash: string, relations: AstRelation[]): void {
+export function saveRelations(db: Database, hash: string, relations: AstRelation[]): void {
   db.prepare("DELETE FROM relations WHERE source_hash = ?").run(hash);
   const insert = db.prepare(
     "INSERT INTO relations (source_hash, target_ref, type, source_symbol, target_symbol, confidence) VALUES (?, ?, ?, ?, ?, ?)"
@@ -62,18 +62,18 @@ export function saveRelations(db: Database.Database, hash: string, relations: As
 }
 
 // --- Queries ---
-export function getRelationsForHash(db: Database.Database, hash: string): RelationRow[] {
+export function getRelationsForHash(db: Database, hash: string): RelationRow[] {
   return db.prepare("SELECT * FROM relations WHERE source_hash = ? OR target_hash = ?").all(hash, hash) as RelationRow[];
 }
 
-export function getSymbolUsages(db: Database.Database, symbolName: string): { defined: SymbolRow[]; usedBy: RelationRow[] } {
+export function getSymbolUsages(db: Database, symbolName: string): { defined: SymbolRow[]; usedBy: RelationRow[] } {
   const defined = db.prepare("SELECT * FROM symbols WHERE name = ?").all(symbolName) as SymbolRow[];
   const usedBy = db.prepare("SELECT * FROM relations WHERE target_symbol = ?").all(symbolName) as RelationRow[];
   return { defined, usedBy };
 }
 
 // --- Resolution ---
-export function resolveTargetHashes(db: Database.Database, collection: string): number {
+export function resolveTargetHashes(db: Database, collection: string): number {
   // Match target_ref against documents.path in the same collection
   // Handle relative paths: "./b" should match "src/b.ts", "src/b/index.ts", etc.
   const unresolved = db.prepare(`
@@ -135,7 +135,7 @@ function resolvePath(base: string, relative: string): string {
 }
 
 // --- Graph Info ---
-export function getFileGraph(db: Database.Database, hash: string): FileGraphInfo {
+export function getFileGraph(db: Database, hash: string): FileGraphInfo {
   const outgoing = db.prepare("SELECT * FROM relations WHERE source_hash = ?").all(hash) as RelationRow[];
   const incoming = db.prepare("SELECT * FROM relations WHERE target_hash = ?").all(hash) as RelationRow[];
 
@@ -160,7 +160,7 @@ export function getFileGraph(db: Database.Database, hash: string): FileGraphInfo
 }
 
 // --- Path Finding (BFS) ---
-export function findPath(db: Database.Database, fromHash: string, toHash: string): string[] | null {
+export function findPath(db: Database, fromHash: string, toHash: string): string[] | null {
   if (fromHash === toHash) return [fromHash];
 
   // Build adjacency from relations (follow both directions)
@@ -209,7 +209,7 @@ export function findPath(db: Database.Database, fromHash: string, toHash: string
 }
 
 // --- Clustering ---
-export function detectClusters(db: Database.Database, collection: string): ClusterResult[] {
+export function detectClusters(db: Database, collection: string): ClusterResult[] {
   // 1. Get all hashes in this collection
   const docs = db.prepare(
     "SELECT DISTINCT d.hash FROM documents d WHERE d.collection = ? AND d.active = 1"
@@ -284,7 +284,7 @@ export function detectClusters(db: Database.Database, collection: string): Clust
     .map(members => ({ members }));
 }
 
-export function nameClusters(db: Database.Database, clusters: ClusterResult[]): NamedCluster[] {
+export function nameClusters(db: Database, clusters: ClusterResult[]): NamedCluster[] {
   return clusters.map((cluster, i) => {
     // Find most-imported symbol in this cluster
     const placeholders = cluster.members.map(() => "?").join(",");
@@ -309,7 +309,7 @@ export function nameClusters(db: Database.Database, clusters: ClusterResult[]): 
 
     const stems = docs.map(d => {
       const parts = d.path.split("/");
-      const file = parts[parts.length - 1];
+      const file = parts[parts.length - 1] || "";
       return file.replace(/\.[^.]+$/, "");
     });
 
@@ -326,7 +326,7 @@ export function nameClusters(db: Database.Database, clusters: ClusterResult[]): 
   });
 }
 
-export function saveClusters(db: Database.Database, collection: string, clusters: NamedCluster[]): void {
+export function saveClusters(db: Database, collection: string, clusters: NamedCluster[]): void {
   // Delete existing clusters for collection
   const existingClusters = db.prepare("SELECT id FROM clusters WHERE collection = ?").all(collection) as { id: number }[];
   for (const c of existingClusters) {
@@ -345,4 +345,42 @@ export function saveClusters(db: Database.Database, collection: string, clusters
       insertMember.run(clusterId, hash);
     }
   }
+}
+
+// --- Search Result Enrichment ---
+export interface EnrichedResult {
+  cluster?: string;
+  importedByCount: number;
+  [key: string]: any;  // preserve original fields
+}
+
+export function enrichSearchResults(db: Database, results: { hash?: string; [key: string]: any }[]): EnrichedResult[] {
+  return results.map(result => {
+    // Skip enrichment if no hash
+    if (!result.hash) {
+      return {
+        ...result,
+        cluster: undefined,
+        importedByCount: 0,
+      };
+    }
+
+    // Get cluster
+    const clusterRow = db.prepare(`
+      SELECT c.name FROM clusters c
+      JOIN cluster_members cm ON c.id = cm.cluster_id
+      WHERE cm.hash = ? LIMIT 1
+    `).get(result.hash) as { name: string } | undefined;
+
+    // Count files that import this one
+    const importCount = db.prepare(
+      "SELECT COUNT(*) as cnt FROM relations WHERE target_hash = ? AND type = 'imports'"
+    ).get(result.hash) as { cnt: number };
+
+    return {
+      ...result,
+      cluster: clusterRow?.name,
+      importedByCount: importCount?.cnt ?? 0,
+    };
+  });
 }

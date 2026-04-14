@@ -111,6 +111,7 @@ import { handleRebuild } from "./rebuild.js";
 import { handleWiki } from "./wiki.js";
 import { bumpCount } from "../wiki.js";
 import { handleGraph, handlePath, handleRelated, handleSymbol, handleClusters } from "./graph.js";
+import { enrichSearchResults } from "../graph.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -1821,6 +1822,7 @@ type OutputOptions = {
   sourceType?: string;   // Filter by source_type: docs|sessions|knowledge
   searchMode?: string;   // bm25|hybrid (default hybrid)
   noCount?: boolean;     // Skip wiki hit count tracking
+  noGraph?: boolean;     // Skip graph enrichment (cluster, importedByCount)
 };
 
 // Highlight query terms in text (skip short words < 3 chars)
@@ -1956,12 +1958,26 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
     return;
   }
 
+  // Enrich with graph context unless --no-graph
+  let enrichedResults = filtered;
+  if (!opts.noGraph) {
+    try {
+      const graphDb = getDb();
+      if (graphDb) {
+        enrichedResults = enrichSearchResults(graphDb, filtered) as any;
+      }
+    } catch {
+      // Graph data not available, skip enrichment
+    }
+  }
+
   // Helper to create qmd:// URI from displayPath
   const toQmdPath = (displayPath: string) => `qmd://${displayPath}`;
 
   if (opts.format === "json") {
     // JSON output for LLM consumption
-    const output = filtered.map(row => {
+    const output = enrichedResults.map(row => {
+      const enriched = row as any;
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : undefined);
       let body = opts.full ? row.body : undefined;
       let snippet = !opts.full ? extractSnippet(row.body, query, 300, row.chunkPos, undefined, opts.intent).snippet : undefined;
@@ -1978,12 +1994,14 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
         ...(body && { body }),
         ...(snippet && { snippet }),
         ...(opts.explain && row.explain && { explain: row.explain }),
+        ...(enriched.cluster && { cluster: enriched.cluster }),
+        ...(enriched.importedByCount > 0 && { importedByCount: enriched.importedByCount }),
       };
     });
     console.log(JSON.stringify(output, null, 2));
   } else if (opts.format === "files") {
     // Simple docid,score,filepath,context output
-    for (const row of filtered) {
+    for (const row of enrichedResults) {
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : "");
       const ctx = row.context ? `,"${row.context.replace(/"/g, '""')}"` : "";
       console.log(`#${docid},${row.score.toFixed(2)},${toQmdPath(row.displayPath)}${ctx}`);
@@ -1992,9 +2010,10 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
     const editorUriTemplate = getEditorUriTemplate();
     const linkDb = getDb();
 
-    for (let i = 0; i < filtered.length; i++) {
-      const row = filtered[i];
+    for (let i = 0; i < enrichedResults.length; i++) {
+      const row = enrichedResults[i];
       if (!row) continue;
+      const enriched = row as any;
       const { line, snippet } = extractSnippet(row.body, query, 500, row.chunkPos, undefined, opts.intent);
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : undefined);
 
@@ -2056,6 +2075,15 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
           console.log(`${c.dim}  Top RRF contributions: ${contribSummary}${c.reset}`);
         }
       }
+
+      // Graph context (if available)
+      if (enriched.cluster || enriched.importedByCount > 0) {
+        const parts: string[] = [];
+        if (enriched.cluster) parts.push(`cluster: ${enriched.cluster}`);
+        if (enriched.importedByCount > 0) parts.push(`imported by: ${enriched.importedByCount} files`);
+        console.log(`${c.dim}${parts.join(" | ")}${c.reset}`);
+      }
+
       console.log();
 
       // Snippet with highlighting (diff-style header included)
@@ -2064,11 +2092,11 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
       console.log(highlighted);
 
       // Double empty line between results
-      if (i < filtered.length - 1) console.log('\n');
+      if (i < enrichedResults.length - 1) console.log('\n');
     }
   } else if (opts.format === "md") {
-    for (let i = 0; i < filtered.length; i++) {
-      const row = filtered[i];
+    for (let i = 0; i < enrichedResults.length; i++) {
+      const row = enrichedResults[i];
       if (!row) continue;
       const heading = row.title || row.displayPath;
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : undefined);
@@ -2081,7 +2109,7 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
       console.log(`---\n# ${heading}\n${docidLine}${contextLine}\n${content}\n`);
     }
   } else if (opts.format === "xml") {
-    for (const row of filtered) {
+    for (const row of enrichedResults) {
       const titleAttr = row.title ? ` title="${row.title.replace(/"/g, '&quot;')}"` : "";
       const contextAttr = row.context ? ` context="${row.context.replace(/"/g, '&quot;')}"` : "";
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : "");
@@ -2094,7 +2122,7 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
   } else {
     // CSV format
     console.log("docid,score,file,title,context,line,snippet");
-    for (const row of filtered) {
+    for (const row of enrichedResults) {
       const { line, snippet } = extractSnippet(row.body, query, 500, row.chunkPos, undefined, opts.intent);
       let content = opts.full ? row.body : snippet;
       if (opts.lineNumbers) {
@@ -2561,6 +2589,8 @@ function parseCLI() {
       intent: { type: "string" },
       // Chunking options
       "chunk-strategy": { type: "string" },  // "regex" (default) or "auto" (AST for code files)
+      // Graph options
+      "no-graph": { type: "boolean", default: false },
       // HwiCortex options
       source: { type: "string" },        // --source docs|sessions|knowledge
       mode: { type: "string" },          // --mode bm25|hybrid
@@ -2621,6 +2651,7 @@ function parseCLI() {
     sourceType: values.source as string | undefined,
     searchMode: values.mode as string | undefined,
     noCount: !!values["no-count"],
+    noGraph: !!values["no-graph"],
   };
 
   return {
