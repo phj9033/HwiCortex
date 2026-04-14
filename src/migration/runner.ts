@@ -151,4 +151,53 @@ export const DEFAULT_MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    description: "Add graph tables: symbols, relations, clusters, cluster_members",
+    up(db: Database) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS symbols (
+          id INTEGER PRIMARY KEY,
+          hash TEXT NOT NULL,
+          name TEXT NOT NULL,
+          kind TEXT NOT NULL,
+          line INTEGER,
+          FOREIGN KEY (hash) REFERENCES content(hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_symbols_hash ON symbols(hash);
+        CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
+
+        CREATE TABLE IF NOT EXISTS relations (
+          id INTEGER PRIMARY KEY,
+          source_hash TEXT NOT NULL,
+          target_hash TEXT,
+          target_ref TEXT NOT NULL,
+          type TEXT NOT NULL,
+          source_symbol TEXT,
+          target_symbol TEXT,
+          confidence REAL DEFAULT 1.0,
+          FOREIGN KEY (source_hash) REFERENCES content(hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_relations_source ON relations(source_hash);
+        CREATE INDEX IF NOT EXISTS idx_relations_target ON relations(target_hash);
+        CREATE INDEX IF NOT EXISTS idx_relations_type ON relations(type);
+
+        CREATE TABLE IF NOT EXISTS clusters (
+          id INTEGER PRIMARY KEY,
+          collection TEXT NOT NULL,
+          name TEXT NOT NULL,
+          created_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(collection, name)
+        );
+
+        CREATE TABLE IF NOT EXISTS cluster_members (
+          cluster_id INTEGER NOT NULL,
+          hash TEXT NOT NULL,
+          PRIMARY KEY (cluster_id, hash),
+          FOREIGN KEY (cluster_id) REFERENCES clusters(id),
+          FOREIGN KEY (hash) REFERENCES content(hash)
+        );
+      `);
+    },
+  },
 ];
