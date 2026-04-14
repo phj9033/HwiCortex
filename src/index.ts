@@ -68,6 +68,13 @@ import {
   LlamaCpp,
 } from "./llm.js";
 import {
+  type AstSymbol,
+  type AstRelation,
+  type AstAnalysis,
+  extractSymbolsAndRelations,
+  getASTStatus,
+} from "./ast.js";
+import {
   setConfigSource,
   loadConfig,
   addCollection as collectionsAddCollection,
@@ -104,6 +111,9 @@ export type {
   CollectionConfig,
   NamedCollection,
   ContextMap,
+  AstSymbol,
+  AstRelation,
+  AstAnalysis,
 };
 
 // Re-export the internal Store type for advanced consumers
@@ -118,6 +128,9 @@ export { getDefaultDbPath } from "./store.js";
 
 // Re-export Maintenance class for CLI housekeeping operations
 export { Maintenance } from "./maintenance.js";
+
+// Re-export AST utilities for SDK consumers
+export { extractSymbolsAndRelations, getASTStatus } from "./ast.js";
 
 /**
  * Progress info emitted during update() for each file processed.

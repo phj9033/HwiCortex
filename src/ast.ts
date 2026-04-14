@@ -363,7 +363,7 @@ export async function getASTStatus(): Promise<{
 }
 
 // =============================================================================
-// Symbol Extraction (Phase 2 Stub)
+// Symbol Extraction (Phase 2)
 // =============================================================================
 
 /**
@@ -388,4 +388,152 @@ export function extractSymbols(
   _endPos: number,
 ): SymbolInfo[] {
   return [];
+}
+
+/**
+ * AST symbol with kind and location.
+ */
+export interface AstSymbol {
+  name: string;
+  kind: "function" | "class" | "interface" | "type" | "enum" | "method";
+  line: number;
+}
+
+/**
+ * Relation between symbols (imports, calls, inheritance, etc.)
+ * Reserved for Task 3.
+ */
+export interface AstRelation {
+  type: "imports" | "calls" | "extends" | "implements" | "uses_type";
+  sourceSymbol?: string;
+  targetRef: string;
+  targetSymbol?: string;
+}
+
+/**
+ * Result of AST analysis.
+ */
+export interface AstAnalysis {
+  symbols: AstSymbol[];
+  relations: AstRelation[];
+}
+
+/**
+ * Tree-sitter queries for extracting symbol declarations.
+ * Each capture name maps to a symbol kind.
+ */
+const SYMBOL_QUERIES: Record<SupportedLanguage, string> = {
+  typescript: `
+    (class_declaration name: (type_identifier) @class_name)
+    (function_declaration name: (identifier) @function_name)
+    (interface_declaration name: (type_identifier) @interface_name)
+    (type_alias_declaration name: (type_identifier) @type_name)
+    (enum_declaration name: (identifier) @enum_name)
+    (method_definition name: (property_identifier) @method_name)
+  `,
+  tsx: `
+    (class_declaration name: (type_identifier) @class_name)
+    (function_declaration name: (identifier) @function_name)
+    (interface_declaration name: (type_identifier) @interface_name)
+    (type_alias_declaration name: (type_identifier) @type_name)
+    (enum_declaration name: (identifier) @enum_name)
+    (method_definition name: (property_identifier) @method_name)
+  `,
+  javascript: `
+    (class_declaration name: (identifier) @class_name)
+    (function_declaration name: (identifier) @function_name)
+    (method_definition name: (property_identifier) @method_name)
+  `,
+  python: `
+    (class_definition name: (identifier) @class_name)
+    (function_definition name: (identifier) @function_name)
+  `,
+  go: `
+    (function_declaration name: (identifier) @function_name)
+    (method_declaration name: (field_identifier) @method_name)
+    (type_spec name: (type_identifier) @type_name)
+  `,
+  rust: `
+    (function_item name: (identifier) @function_name)
+    (struct_item name: (type_identifier) @type_name)
+    (enum_item name: (type_identifier) @enum_name)
+    (trait_item name: (type_identifier) @interface_name)
+  `,
+};
+
+/**
+ * Map capture names to symbol kinds.
+ */
+const SYMBOL_KIND_MAP: Record<string, AstSymbol["kind"]> = {
+  class_name: "class",
+  function_name: "function",
+  interface_name: "interface",
+  type_name: "type",
+  enum_name: "enum",
+  method_name: "method",
+};
+
+/**
+ * Extract symbols and relations from source code using tree-sitter.
+ *
+ * @param content - Source code content
+ * @param filepath - File path (used for language detection)
+ * @returns AstAnalysis with symbols and relations (relations empty in Phase 2)
+ */
+export async function extractSymbolsAndRelations(
+  content: string,
+  filepath: string,
+): Promise<AstAnalysis> {
+  const language = detectLanguage(filepath);
+  if (!language) {
+    return { symbols: [], relations: [] };
+  }
+
+  try {
+    await ensureInit();
+
+    const grammar = await loadGrammar(language);
+    if (!grammar) {
+      return { symbols: [], relations: [] };
+    }
+
+    const parser = new ParserClass!();
+    parser.setLanguage(grammar);
+
+    const tree = parser.parse(content);
+    if (!tree) {
+      parser.delete();
+      return { symbols: [], relations: [] };
+    }
+
+    const querySource = SYMBOL_QUERIES[language];
+    const query = new QueryClass!(grammar, querySource);
+    const captures = query.captures(tree.rootNode);
+
+    const symbols: AstSymbol[] = [];
+    const lines = content.split("\n");
+
+    for (const cap of captures) {
+      const kind = SYMBOL_KIND_MAP[cap.name];
+      if (!kind) continue;
+
+      const name = cap.node.text;
+      const line = cap.node.startPosition.row + 1; // 1-indexed
+
+      symbols.push({ name, kind, line });
+    }
+
+    tree.delete();
+    parser.delete();
+
+    return {
+      symbols,
+      relations: [], // Phase 3
+    };
+  } catch (err) {
+    console.warn(
+      `[qmd] Symbol extraction failed for ${filepath}: ${err instanceof Error ? err.message : err}`
+    );
+    return { symbols: [], relations: [] };
+  }
 }
