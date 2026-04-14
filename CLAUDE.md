@@ -26,6 +26,12 @@ hwicortex mcp                           # Start MCP server (stdio transport)
 hwicortex mcp --http [--port N]         # Start MCP server (HTTP, default port 8181)
 hwicortex mcp --http --daemon           # Start as background daemon
 hwicortex mcp stop                      # Stop background MCP daemon
+hwicortex graph <file>                  # Show file relationships (imports, calls, cluster)
+hwicortex path <fileA> <fileB>          # Find connection path between files
+hwicortex related <file>                # Show related files (direct + cluster)
+hwicortex symbol <name>                 # Find where a symbol is defined and used
+hwicortex graph clusters [--collection] # List auto-detected module clusters
+hwicortex graph --obsidian              # Generate Obsidian cluster/relation pages
 ```
 
 ## Collection Management
@@ -113,6 +119,7 @@ hwicortex multi-get "#abc123, #def456"
 
 # Output formats (search and multi-get)
 --json, --csv, --md, --xml, --files
+--no-graph              # Disable graph context in search results
 ```
 
 ## Build & Install
@@ -164,6 +171,10 @@ bun test --preload ./src/test-preload.ts test/
 - Smart chunking: 900 tokens/chunk with 15% overlap, prefers markdown headings as boundaries
 - AST-aware chunking: use `--chunk-strategy auto` to chunk code files (.ts/.js/.py/.go/.rs) at function/class/import boundaries via tree-sitter. Default is `regex` (existing behavior). Markdown and unknown file types always use regex chunking.
 - Korean morphological analysis via mecab-ko: content morphemes (nouns, verbs, adjectives) are indexed for BM25 so inflected forms match (e.g. "검색" matches "검색했다"). Requires mecab-ko system package; falls back to standard FTS5 tokenization when not installed.
+- Graph extraction: AST-based symbol and relation extraction (imports, calls, extends, implements, uses_type) via tree-sitter. Extracted automatically during `hwicortex update`. No LLM calls required.
+- Calls filtering: only tracks calls to imported symbols within the same collection (excludes stdlib/external).
+- Clustering: label propagation algorithm (pure JS, no external deps) groups related files into modules.
+- Obsidian visualization: `hwicortex graph --obsidian` generates cluster index and file relation pages in `vault/wiki/{project}/`.
 
 ## Important: Do NOT run automatically
 
