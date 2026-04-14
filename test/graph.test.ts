@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { runMigrations, DEFAULT_MIGRATIONS } from "../src/migration/runner";
-import { saveSymbols, saveRelations, getRelationsForHash, getSymbolUsages, resolveTargetHashes, getFileGraph, findPath } from "../src/graph";
+import { saveSymbols, saveRelations, getRelationsForHash, getSymbolUsages, resolveTargetHashes, getFileGraph, findPath, detectClusters, nameClusters, saveClusters } from "../src/graph";
 
 describe("graph migration v3", () => {
   let db: Database.Database;
@@ -147,5 +147,58 @@ describe("graph storage", () => {
     `);
     const path = findPath(db, "hash_a", "hash_z");
     expect(path).toBeNull();
+  });
+
+  describe("clustering", () => {
+    // Extend seed data for clustering tests
+    beforeEach(() => {
+      db.exec(`
+        INSERT INTO content VALUES ('hash_c', 'content c', datetime('now'));
+        INSERT INTO content VALUES ('hash_x', 'content x', datetime('now'));
+        INSERT INTO content VALUES ('hash_y', 'content y', datetime('now'));
+        INSERT INTO documents (id, collection, path, title, hash, active, modified_at, indexed_at, source_type, project, tags)
+          VALUES (3, 'test', 'src/c.ts', 'c', 'hash_c', 1, NULL, NULL, 'docs', NULL, NULL);
+        INSERT INTO documents (id, collection, path, title, hash, active, modified_at, indexed_at, source_type, project, tags)
+          VALUES (4, 'test', 'src/x.ts', 'x', 'hash_x', 1, NULL, NULL, 'docs', NULL, NULL);
+        INSERT INTO documents (id, collection, path, title, hash, active, modified_at, indexed_at, source_type, project, tags)
+          VALUES (5, 'test', 'src/y.ts', 'y', 'hash_y', 1, NULL, NULL, 'docs', NULL, NULL);
+      `);
+    });
+
+    it("detects clusters from relations", () => {
+      // Cluster 1: a → b → c
+      // Cluster 2: x → y
+      saveRelations(db, "hash_a", [{ type: "imports", targetRef: "./b", targetSymbol: "b" }]);
+      saveRelations(db, "hash_b", [{ type: "imports", targetRef: "./c", targetSymbol: "c" }]);
+      saveRelations(db, "hash_x", [{ type: "imports", targetRef: "./y", targetSymbol: "y" }]);
+      resolveTargetHashes(db, "test");
+
+      const clusters = detectClusters(db, "test");
+      expect(clusters.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("saves clusters to database", () => {
+      saveRelations(db, "hash_a", [{ type: "imports", targetRef: "./b", targetSymbol: "b" }]);
+      resolveTargetHashes(db, "test");
+      const clusters = detectClusters(db, "test");
+      saveClusters(db, "test", nameClusters(db, clusters));
+
+      const rows = db.prepare("SELECT * FROM clusters WHERE collection = ?").all("test");
+      expect(rows.length).toBeGreaterThan(0);
+
+      const members = db.prepare("SELECT * FROM cluster_members").all();
+      expect(members.length).toBeGreaterThan(0);
+    });
+
+    it("names clusters by most-imported symbol", () => {
+      saveSymbols(db, "hash_a", [{ name: "createStore", kind: "function", line: 1 }]);
+      saveRelations(db, "hash_b", [{ type: "imports", targetRef: "./a", targetSymbol: "createStore" }]);
+      saveRelations(db, "hash_c", [{ type: "imports", targetRef: "./a", targetSymbol: "createStore" }]);
+      resolveTargetHashes(db, "test");
+
+      const clusters = detectClusters(db, "test");
+      const named = nameClusters(db, clusters);
+      expect(named[0].name).toContain("createStore");
+    });
   });
 });

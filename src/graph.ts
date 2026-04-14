@@ -33,6 +33,15 @@ export interface FileGraphInfo {
   cluster?: string;
 }
 
+export interface ClusterResult {
+  members: string[];  // array of content hashes
+}
+
+export interface NamedCluster {
+  name: string;
+  members: string[];
+}
+
 // --- Storage ---
 export function saveSymbols(db: Database.Database, hash: string, symbols: AstSymbol[]): void {
   db.prepare("DELETE FROM symbols WHERE hash = ?").run(hash);
@@ -197,4 +206,143 @@ export function findPath(db: Database.Database, fromHash: string, toHash: string
   }
 
   return null;
+}
+
+// --- Clustering ---
+export function detectClusters(db: Database.Database, collection: string): ClusterResult[] {
+  // 1. Get all hashes in this collection
+  const docs = db.prepare(
+    "SELECT DISTINCT d.hash FROM documents d WHERE d.collection = ? AND d.active = 1"
+  ).all(collection) as { hash: string }[];
+
+  const allHashes = new Set(docs.map(d => d.hash));
+  if (allHashes.size === 0) return [];
+
+  // 2. Build adjacency from resolved relations within this collection
+  const relations = db.prepare(`
+    SELECT r.source_hash, r.target_hash FROM relations r
+    WHERE r.target_hash IS NOT NULL
+    AND r.source_hash IN (SELECT hash FROM documents WHERE collection = ? AND active = 1)
+    AND r.target_hash IN (SELECT hash FROM documents WHERE collection = ? AND active = 1)
+  `).all(collection, collection) as { source_hash: string; target_hash: string }[];
+
+  const adj = new Map<string, Set<string>>();
+  for (const hash of allHashes) adj.set(hash, new Set());
+
+  for (const r of relations) {
+    adj.get(r.source_hash)?.add(r.target_hash);
+    adj.get(r.target_hash)?.add(r.source_hash);
+  }
+
+  // 3. Label propagation
+  const labels = new Map<string, string>();
+  for (const hash of allHashes) labels.set(hash, hash); // each node starts with own label
+
+  let changed = true;
+  let iterations = 0;
+  while (changed && iterations < 100) {
+    changed = false;
+    iterations++;
+
+    for (const hash of allHashes) {
+      const neighbors = adj.get(hash);
+      if (!neighbors || neighbors.size === 0) continue;
+
+      // Count neighbor labels
+      const labelCounts = new Map<string, number>();
+      for (const neighbor of neighbors) {
+        const label = labels.get(neighbor)!;
+        labelCounts.set(label, (labelCounts.get(label) || 0) + 1);
+      }
+
+      // Find most frequent label
+      let maxCount = 0;
+      let maxLabel = labels.get(hash)!;
+      for (const [label, count] of labelCounts) {
+        if (count > maxCount) {
+          maxCount = count;
+          maxLabel = label;
+        }
+      }
+
+      if (maxLabel !== labels.get(hash)) {
+        labels.set(hash, maxLabel);
+        changed = true;
+      }
+    }
+  }
+
+  // 4. Group by label, filter singletons
+  const groups = new Map<string, string[]>();
+  for (const [hash, label] of labels) {
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(hash);
+  }
+
+  return Array.from(groups.values())
+    .filter(members => members.length >= 2)
+    .map(members => ({ members }));
+}
+
+export function nameClusters(db: Database.Database, clusters: ClusterResult[]): NamedCluster[] {
+  return clusters.map((cluster, i) => {
+    // Find most-imported symbol in this cluster
+    const placeholders = cluster.members.map(() => "?").join(",");
+    const topSymbol = db.prepare(`
+      SELECT r.target_symbol, COUNT(*) as cnt
+      FROM relations r
+      WHERE r.target_hash IN (${placeholders})
+      AND r.target_symbol IS NOT NULL
+      GROUP BY r.target_symbol
+      ORDER BY cnt DESC
+      LIMIT 1
+    `).get(...cluster.members) as { target_symbol: string; cnt: number } | undefined;
+
+    if (topSymbol) {
+      return { name: topSymbol.target_symbol, members: cluster.members };
+    }
+
+    // Fallback: use most common filename stem
+    const docs = db.prepare(`
+      SELECT path FROM documents WHERE hash IN (${placeholders}) AND active = 1
+    `).all(...cluster.members) as { path: string }[];
+
+    const stems = docs.map(d => {
+      const parts = d.path.split("/");
+      const file = parts[parts.length - 1];
+      return file.replace(/\.[^.]+$/, "");
+    });
+
+    // Most common stem
+    const stemCounts = new Map<string, number>();
+    for (const s of stems) stemCounts.set(s, (stemCounts.get(s) || 0) + 1);
+    let bestStem = `cluster-${i}`;
+    let bestCount = 0;
+    for (const [stem, count] of stemCounts) {
+      if (count > bestCount) { bestCount = count; bestStem = stem; }
+    }
+
+    return { name: bestStem, members: cluster.members };
+  });
+}
+
+export function saveClusters(db: Database.Database, collection: string, clusters: NamedCluster[]): void {
+  // Delete existing clusters for collection
+  const existingClusters = db.prepare("SELECT id FROM clusters WHERE collection = ?").all(collection) as { id: number }[];
+  for (const c of existingClusters) {
+    db.prepare("DELETE FROM cluster_members WHERE cluster_id = ?").run(c.id);
+  }
+  db.prepare("DELETE FROM clusters WHERE collection = ?").run(collection);
+
+  // Insert new clusters
+  const insertCluster = db.prepare("INSERT INTO clusters (collection, name) VALUES (?, ?)");
+  const insertMember = db.prepare("INSERT INTO cluster_members (cluster_id, hash) VALUES (?, ?)");
+
+  for (const cluster of clusters) {
+    const result = insertCluster.run(collection, cluster.name);
+    const clusterId = result.lastInsertRowid;
+    for (const hash of cluster.members) {
+      insertMember.run(clusterId, hash);
+    }
+  }
 }
