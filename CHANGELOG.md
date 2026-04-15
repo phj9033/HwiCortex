@@ -2,14 +2,46 @@
 
 ## [Unreleased]
 
+### Added
+
+- C# (.cs) language support for graph extraction (symbols, relations: using, extends, implements, attributes)
+- Markdown wiki-link (`[[...]]`) graph extraction for document clustering
+- `--kind code|doc` filter for `graph clusters` command
+- Kind-separated cluster output (Code Clusters / Doc Clusters)
+- Wiki-link display in `graph` and `related` commands
+- Obsidian cluster pages split by kind (`_clusters/code/`, `_clusters/doc/`)
+- Wiki-link sections in Obsidian relation pages
+
 ### Changes
 
+- **Graph integration**: AST-based symbol and relation extraction via
+  tree-sitter. `hwicortex update` now automatically extracts symbols
+  (functions, classes, interfaces, types) and relations (imports, calls,
+  extends, implements, uses_type) from code files. No LLM calls required.
+- **Graph CLI commands**: `hwicortex graph <file>` shows file relationships,
+  `hwicortex path <fileA> <fileB>` finds connection paths,
+  `hwicortex related <file>` shows direct and cluster relations,
+  `hwicortex symbol <name>` finds symbol definitions and usages,
+  `hwicortex graph clusters` lists auto-detected module clusters.
+- **Graph-enriched search**: search results now include cluster membership
+  and relation context when available. Disable with `--no-graph`.
+- **Label propagation clustering**: pure JS implementation groups related
+  files into modules based on import/call relationships.
+- **Obsidian graph visualization**: `hwicortex graph --obsidian` generates
+  cluster index and file relation pages in `vault/wiki/{project}/`.
+- **Wiki hit counting**: wiki pages referenced in search/query results
+  automatically increment their `hit_count` for importance tracking.
 - Korean morphological analysis for BM25 search via mecab-ko. Korean text is
   preprocessed into content morphemes (nouns, verbs, adjectives) at indexing
   time, so searching "검색" matches "검색했다", "검색하는", etc. Requires
   mecab-ko system package; graceful fallback to standard FTS5 tokenization
   when not installed. Run `hwicortex rebuild` after installing mecab to
   reindex existing documents.
+
+### Fixes
+
+- Fix wiki project extraction in search/query hit counting.
+- Fix notebook environment setup failures.
 
 ## [2.1.0] - 2026-04-05
 
@@ -610,6 +642,25 @@ notes, journals, and meeting transcripts.
 - CLI: `qmd add`, `qmd embed`, `qmd search`, `qmd vsearch`, `qmd query`,
   `qmd get`. ~1800 lines of TypeScript in a single `qmd.ts` file.
 
-[Unreleased]: https://github.com/tobi/qmd/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/tobi/qmd/releases/tag/v1.0.0
-[0.9.0]: https://github.com/tobi/qmd/compare/v0.8.0...v0.9.0
+[Unreleased]: https://github.com/user/HwiCortex/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/user/HwiCortex/releases/tag/v2.1.0
+[2.0.1]: https://github.com/user/HwiCortex/releases/tag/v2.0.1
+[2.0.0]: https://github.com/user/HwiCortex/releases/tag/v2.0.0
+[1.1.6]: https://github.com/user/HwiCortex/releases/tag/v1.1.6
+[1.1.5]: https://github.com/user/HwiCortex/releases/tag/v1.1.5
+[1.1.2]: https://github.com/user/HwiCortex/releases/tag/v1.1.2
+[1.1.1]: https://github.com/user/HwiCortex/releases/tag/v1.1.1
+[1.1.0]: https://github.com/user/HwiCortex/releases/tag/v1.1.0
+[1.0.7]: https://github.com/user/HwiCortex/releases/tag/v1.0.7
+[1.0.6]: https://github.com/user/HwiCortex/releases/tag/v1.0.6
+[1.0.5]: https://github.com/user/HwiCortex/releases/tag/v1.0.5
+[1.0.0]: https://github.com/user/HwiCortex/releases/tag/v1.0.0
+[0.9.0]: https://github.com/user/HwiCortex/releases/tag/v0.9.0
+[0.8.0]: https://github.com/user/HwiCortex/releases/tag/v0.8.0
+[0.7.0]: https://github.com/user/HwiCortex/releases/tag/v0.7.0
+[0.6.0]: https://github.com/user/HwiCortex/releases/tag/v0.6.0
+[0.5.0]: https://github.com/user/HwiCortex/releases/tag/v0.5.0
+[0.4.0]: https://github.com/user/HwiCortex/releases/tag/v0.4.0
+[0.3.0]: https://github.com/user/HwiCortex/releases/tag/v0.3.0
+[0.2.0]: https://github.com/user/HwiCortex/releases/tag/v0.2.0
+[0.1.0]: https://github.com/user/HwiCortex/releases/tag/v0.1.0

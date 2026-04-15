@@ -15,7 +15,7 @@ export function extractWikiLinks(content: string): AstRelation[] {
   const relations: AstRelation[] = [];
 
   for (const match of withoutCode.matchAll(pattern)) {
-    const targetRef = match[1].trim();
+    const targetRef = match[1]?.trim();
     if (targetRef && !seen.has(targetRef)) {
       seen.add(targetRef);
       relations.push({ type: "wiki_link", targetRef });

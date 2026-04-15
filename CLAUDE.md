@@ -30,7 +30,7 @@ hwicortex graph <file>                  # Show file relationships (imports, call
 hwicortex path <fileA> <fileB>          # Find connection path between files
 hwicortex related <file>                # Show related files (direct + cluster)
 hwicortex symbol <name>                 # Find where a symbol is defined and used
-hwicortex graph clusters [--collection] # List auto-detected module clusters
+hwicortex graph clusters [--collection] [--kind code|doc] # List auto-detected module clusters
 hwicortex graph --obsidian              # Generate Obsidian cluster/relation pages
 ```
 

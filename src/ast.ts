@@ -770,7 +770,7 @@ export async function extractSymbolsAndRelations(
           if (dotIdx >= 0) typeName = typeName.substring(dotIdx + 1);
 
           // I-prefix convention for interfaces
-          const relType = typeName.startsWith("I") && typeName.length > 1 && typeName[1] === typeName[1].toUpperCase()
+          const relType = typeName.startsWith("I") && typeName.length > 1 && typeName[1]?.toUpperCase() === typeName[1]
             ? "implements" : "extends";
           relations.push({ type: relType, sourceSymbol: className, targetRef: typeName });
         }
@@ -799,7 +799,7 @@ export async function extractSymbolsAndRelations(
         if (!funcNode) continue;
         const funcText = funcNode.text;
         const genericMatch = funcText.match(/(?:Resources\.Load|Addressables\.LoadAssetAsync)<(\w+)>/);
-        if (genericMatch) {
+        if (genericMatch?.[1]) {
           relations.push({ type: "uses_type", targetRef: genericMatch[1] });
         }
       }
