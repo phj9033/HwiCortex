@@ -44,6 +44,42 @@ describe("graph migration v3", () => {
   });
 });
 
+describe("migration v4 - cluster kind", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    // Create base tables needed by migrations
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS content (hash TEXT PRIMARY KEY, doc TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, path TEXT NOT NULL,
+        title TEXT, hash TEXT NOT NULL, active INTEGER DEFAULT 1, modified_at TEXT, indexed_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS store_collections (
+        name TEXT PRIMARY KEY, path TEXT NOT NULL, pattern TEXT NOT NULL DEFAULT '**/*.md'
+      );
+    `);
+    // Run all migrations including v4
+    runMigrations(db, ":memory:", DEFAULT_MIGRATIONS);
+  });
+
+  afterEach(() => db.close());
+
+  it("adds kind column to clusters table", () => {
+    const info = db.prepare("PRAGMA table_info(clusters)").all() as { name: string }[];
+    expect(info.map(c => c.name)).toContain("kind");
+  });
+
+  it("updates unique constraint to include kind", () => {
+    // Should allow same name with different kinds
+    db.prepare("INSERT INTO clusters (collection, name, kind) VALUES ('test', 'foo', 'code')").run();
+    db.prepare("INSERT INTO clusters (collection, name, kind) VALUES ('test', 'foo', 'doc')").run();
+    const count = (db.prepare("SELECT COUNT(*) as c FROM clusters WHERE name = 'foo'").get() as any).c;
+    expect(count).toBe(2);
+  });
+});
+
 describe("graph storage", () => {
   let db: Database.Database;
 

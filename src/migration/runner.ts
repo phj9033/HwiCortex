@@ -200,4 +200,25 @@ export const DEFAULT_MIGRATIONS: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    description: "Add kind column to clusters for code/doc separation",
+    up(db: Database) {
+      db.exec(`
+        -- Recreate clusters table with kind column and updated unique constraint
+        CREATE TABLE clusters_new (
+          id INTEGER PRIMARY KEY,
+          collection TEXT NOT NULL,
+          name TEXT NOT NULL,
+          kind TEXT DEFAULT 'code',
+          created_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(collection, name, kind)
+        );
+        INSERT INTO clusters_new (id, collection, name, kind, created_at)
+          SELECT id, collection, name, 'code', created_at FROM clusters;
+        DROP TABLE clusters;
+        ALTER TABLE clusters_new RENAME TO clusters;
+      `);
+    },
+  },
 ];
