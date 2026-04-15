@@ -31,7 +31,7 @@ type QueryType = import("web-tree-sitter").Query;
 // Language Detection
 // =============================================================================
 
-export type SupportedLanguage = "typescript" | "tsx" | "javascript" | "python" | "go" | "rust";
+export type SupportedLanguage = "typescript" | "tsx" | "javascript" | "python" | "go" | "rust" | "csharp";
 
 const EXTENSION_MAP: Record<string, SupportedLanguage> = {
   ".ts": "typescript",
@@ -45,6 +45,7 @@ const EXTENSION_MAP: Record<string, SupportedLanguage> = {
   ".py": "python",
   ".go": "go",
   ".rs": "rust",
+  ".cs": "csharp",
 };
 
 /**
@@ -70,6 +71,7 @@ const GRAMMAR_MAP: Record<SupportedLanguage, { pkg: string; wasm: string }> = {
   python:     { pkg: "tree-sitter-python",     wasm: "tree-sitter-python.wasm" },
   go:         { pkg: "tree-sitter-go",         wasm: "tree-sitter-go.wasm" },
   rust:       { pkg: "tree-sitter-rust",        wasm: "tree-sitter-rust.wasm" },
+  csharp:     { pkg: "tree-sitter-c-sharp",    wasm: "tree-sitter-c_sharp.wasm" },
 };
 
 // =============================================================================
@@ -141,6 +143,7 @@ const LANGUAGE_QUERIES: Record<SupportedLanguage, string> = {
     (type_item) @type
     (mod_item) @mod
   `,
+  csharp: ``,
 };
 
 /**
@@ -458,6 +461,13 @@ const SYMBOL_QUERIES: Record<SupportedLanguage, string> = {
     (struct_item name: (type_identifier) @type_name)
     (enum_item name: (type_identifier) @enum_name)
     (trait_item name: (type_identifier) @interface_name)
+  `,
+  csharp: `
+    (class_declaration name: (identifier) @class_name)
+    (method_declaration name: (identifier) @method_name)
+    (interface_declaration name: (identifier) @interface_name)
+    (enum_declaration name: (identifier) @enum_name)
+    (struct_declaration name: (identifier) @type_name)
   `,
 };
 

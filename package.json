@@ -1,7 +1,7 @@
 {
   "name": "hwicortex",
   "version": "2.1.0",
-  "description": "Query Markup Documents - On-device hybrid search for markdown files with BM25, vector search, and LLM reranking",
+  "description": "HwiCortex - On-device hybrid search and knowledge extraction for markdown files with BM25, vector search, LLM reranking, and code graph analysis",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -39,11 +39,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobi/qmd.git"
+    "url": "git+https://github.com/user/HwiCortex.git"
   },
-  "homepage": "https://github.com/tobi/qmd#readme",
+  "homepage": "https://github.com/user/HwiCortex#readme",
   "bugs": {
-    "url": "https://github.com/tobi/qmd/issues"
+    "url": "https://github.com/user/HwiCortex/issues"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
@@ -65,6 +65,7 @@
     "sqlite-vec-linux-arm64": "0.1.9",
     "sqlite-vec-linux-x64": "0.1.9",
     "sqlite-vec-windows-x64": "0.1.9",
+    "tree-sitter-c-sharp": "0.23.1",
     "tree-sitter-go": "0.23.4",
     "tree-sitter-python": "0.23.4",
     "tree-sitter-rust": "0.24.0",
@@ -108,9 +109,16 @@
     "mcp",
     "reranking",
     "knowledge-base",
+    "knowledge-extraction",
     "local-ai",
-    "llm"
+    "llm",
+    "code-graph",
+    "tree-sitter",
+    "obsidian"
   ],
-  "author": "Tobi Lutke <tobi@lutke.com>",
+  "author": "hwijung-park <hwijung-park@linecorp.com>",
+  "contributors": [
+    "Tobi Lutke <tobi@lutke.com> (original QMD author)"
+  ],
   "license": "MIT"
 }

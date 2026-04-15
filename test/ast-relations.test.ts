@@ -140,4 +140,45 @@ describe("extractSymbolsAndRelations", () => {
       });
     });
   });
+
+  describe("C# symbol extraction", () => {
+    it("extracts class, method, interface, enum, struct from C#", async () => {
+      const code = `
+using System;
+
+public interface IPlayerService {
+    void Execute();
+}
+
+public class PlayerController : MonoBehaviour {
+    public int health;
+
+    public void TakeDamage(int amount) {
+        health -= amount;
+    }
+}
+
+public enum PlayerState {
+    Idle,
+    Running
+}
+
+public struct PlayerData {
+    public int level;
+}
+`;
+      const result = await extractSymbolsAndRelations(code, "Player.cs");
+      const kinds = result.symbols.map(s => ({ name: s.name, kind: s.kind }));
+      expect(kinds).toContainEqual({ name: "IPlayerService", kind: "interface" });
+      expect(kinds).toContainEqual({ name: "PlayerController", kind: "class" });
+      expect(kinds).toContainEqual({ name: "TakeDamage", kind: "method" });
+      expect(kinds).toContainEqual({ name: "PlayerState", kind: "enum" });
+      expect(kinds).toContainEqual({ name: "PlayerData", kind: "type" });
+    });
+
+    it("returns empty for unsupported .shader files", async () => {
+      const result = await extractSymbolsAndRelations("Shader {}", "test.shader");
+      expect(result.symbols).toHaveLength(0);
+    });
+  });
 });
