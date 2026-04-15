@@ -329,3 +329,71 @@ describe("wiki-link title resolution", () => {
     expect(resolved).toBe(1);
   });
 });
+
+describe("kind-separated clustering", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    // Create base tables needed by migrations
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS content (hash TEXT PRIMARY KEY, doc TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, path TEXT NOT NULL,
+        title TEXT, hash TEXT NOT NULL, active INTEGER DEFAULT 1, modified_at TEXT, indexed_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS store_collections (
+        name TEXT PRIMARY KEY, path TEXT NOT NULL, pattern TEXT NOT NULL DEFAULT '**/*.md'
+      );
+    `);
+    // Run all migrations including v4
+    runMigrations(db, ":memory:", DEFAULT_MIGRATIONS);
+  });
+
+  afterEach(() => db.close());
+
+  it("produces separate code and doc clusters", () => {
+    // Set up code files with import relations
+    db.prepare("INSERT INTO content VALUES ('c1', 'code1', datetime('now'))").run();
+    db.prepare("INSERT INTO content VALUES ('c2', 'code2', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('mixed', 'a.ts', 'c1', 'a', 1)").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('mixed', 'b.ts', 'c2', 'b', 1)").run();
+    saveRelations(db, "c1", [{ type: "imports", targetRef: "./b" }]);
+    db.prepare("UPDATE relations SET target_hash = 'c2' WHERE source_hash = 'c1'").run();
+
+    // Set up doc files with wiki_link relations
+    db.prepare("INSERT INTO content VALUES ('d1', 'doc1', datetime('now'))").run();
+    db.prepare("INSERT INTO content VALUES ('d2', 'doc2', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('mixed', 'x.md', 'd1', 'x', 1)").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('mixed', 'y.md', 'd2', 'y', 1)").run();
+    saveRelations(db, "d1", [{ type: "wiki_link", targetRef: "y" }]);
+    db.prepare("UPDATE relations SET target_hash = 'd2' WHERE source_hash = 'd1'").run();
+
+    // Code clusters
+    const codeClusters = detectClusters(db, "mixed", { relationTypes: ["imports", "calls", "extends", "implements", "uses_type"] });
+    expect(codeClusters.length).toBeGreaterThanOrEqual(1);
+    const codeMembers = codeClusters.flatMap(c => c.members);
+    expect(codeMembers).toContain("c1");
+    expect(codeMembers).not.toContain("d1");
+
+    // Doc clusters
+    const docClusters = detectClusters(db, "mixed", { relationTypes: ["wiki_link"] });
+    expect(docClusters.length).toBeGreaterThanOrEqual(1);
+    const docMembers = docClusters.flatMap(c => c.members);
+    expect(docMembers).toContain("d1");
+    expect(docMembers).not.toContain("c1");
+  });
+
+  it("saveClusters with kind does not delete other kind", () => {
+    db.prepare("INSERT INTO content VALUES ('s1', 'a', datetime('now'))").run();
+    db.prepare("INSERT INTO content VALUES ('s2', 'b', datetime('now'))").run();
+
+    saveClusters(db, "test", [{ name: "code-cluster", members: ["s1", "s2"] }], "code");
+    saveClusters(db, "test", [{ name: "doc-cluster", members: ["s1", "s2"] }], "doc");
+
+    const all = db.prepare("SELECT name, kind FROM clusters WHERE collection = 'test'").all() as any[];
+    expect(all).toHaveLength(2);
+    expect(all.map((c: any) => c.kind)).toContain("code");
+    expect(all.map((c: any) => c.kind)).toContain("doc");
+  });
+});

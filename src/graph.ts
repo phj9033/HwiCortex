@@ -266,7 +266,7 @@ export function findPath(db: Database, fromHash: string, toHash: string): string
 }
 
 // --- Clustering ---
-export function detectClusters(db: Database, collection: string): ClusterResult[] {
+export function detectClusters(db: Database, collection: string, opts?: { relationTypes?: string[] }): ClusterResult[] {
   // 1. Get all hashes in this collection
   const docs = db.prepare(
     "SELECT DISTINCT d.hash FROM documents d WHERE d.collection = ? AND d.active = 1"
@@ -276,12 +276,21 @@ export function detectClusters(db: Database, collection: string): ClusterResult[
   if (allHashes.size === 0) return [];
 
   // 2. Build adjacency from resolved relations within this collection
-  const relations = db.prepare(`
+  let relQuery = `
     SELECT r.source_hash, r.target_hash FROM relations r
     WHERE r.target_hash IS NOT NULL
     AND r.source_hash IN (SELECT hash FROM documents WHERE collection = ? AND active = 1)
     AND r.target_hash IN (SELECT hash FROM documents WHERE collection = ? AND active = 1)
-  `).all(collection, collection) as { source_hash: string; target_hash: string }[];
+  `;
+  const params: any[] = [collection, collection];
+
+  if (opts?.relationTypes && opts.relationTypes.length > 0) {
+    const placeholders = opts.relationTypes.map(() => "?").join(", ");
+    relQuery += ` AND r.type IN (${placeholders})`;
+    params.push(...opts.relationTypes);
+  }
+
+  const relations = db.prepare(relQuery).all(...params) as { source_hash: string; target_hash: string }[];
 
   const adj = new Map<string, Set<string>>();
   for (const hash of allHashes) adj.set(hash, new Set());
@@ -383,20 +392,22 @@ export function nameClusters(db: Database, clusters: ClusterResult[]): NamedClus
   });
 }
 
-export function saveClusters(db: Database, collection: string, clusters: NamedCluster[]): void {
-  // Delete existing clusters for collection
-  const existingClusters = db.prepare("SELECT id FROM clusters WHERE collection = ?").all(collection) as { id: number }[];
+export function saveClusters(db: Database, collection: string, clusters: NamedCluster[], kind: "code" | "doc" = "code"): void {
+  // Delete existing clusters for collection and kind
+  const existingClusters = db.prepare(
+    "SELECT id FROM clusters WHERE collection = ? AND kind = ?"
+  ).all(collection, kind) as { id: number }[];
   for (const c of existingClusters) {
     db.prepare("DELETE FROM cluster_members WHERE cluster_id = ?").run(c.id);
   }
-  db.prepare("DELETE FROM clusters WHERE collection = ?").run(collection);
+  db.prepare("DELETE FROM clusters WHERE collection = ? AND kind = ?").run(collection, kind);
 
   // Insert new clusters
-  const insertCluster = db.prepare("INSERT INTO clusters (collection, name) VALUES (?, ?)");
+  const insertCluster = db.prepare("INSERT INTO clusters (collection, name, kind) VALUES (?, ?, ?)");
   const insertMember = db.prepare("INSERT INTO cluster_members (cluster_id, hash) VALUES (?, ?)");
 
   for (const cluster of clusters) {
-    const result = insertCluster.run(collection, cluster.name);
+    const result = insertCluster.run(collection, cluster.name, kind);
     const clusterId = result.lastInsertRowid;
     for (const hash of cluster.members) {
       insertMember.run(clusterId, hash);
