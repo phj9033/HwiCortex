@@ -279,3 +279,53 @@ describe("symbol-name resolution fallback", () => {
     expect(rel.target_hash).toBe("hash_a");
   });
 });
+
+describe("wiki-link title resolution", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    // Create base tables needed by migrations
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS content (hash TEXT PRIMARY KEY, doc TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, path TEXT NOT NULL,
+        title TEXT, hash TEXT NOT NULL, active INTEGER DEFAULT 1, modified_at TEXT, indexed_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS store_collections (
+        name TEXT PRIMARY KEY, path TEXT NOT NULL, pattern TEXT NOT NULL DEFAULT '**/*.md'
+      );
+    `);
+    // Run all migrations including v3
+    runMigrations(db, ":memory:", DEFAULT_MIGRATIONS);
+  });
+
+  afterEach(() => db.close());
+
+  it("resolves wiki link by filename stem", () => {
+    db.prepare("INSERT INTO content VALUES ('hash_md1', '# Settings', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('test', 'specs/settings.md', 'hash_md1', 'Settings', 1)").run();
+
+    db.prepare("INSERT INTO content VALUES ('hash_md2', '[[settings]]', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('test', 'docs/overview.md', 'hash_md2', 'Overview', 1)").run();
+    saveRelations(db, "hash_md2", [{ type: "wiki_link", targetRef: "settings" }]);
+
+    const resolved = resolveTargetHashes(db, "test");
+    expect(resolved).toBe(1);
+
+    const rel = db.prepare("SELECT target_hash FROM relations WHERE source_hash = 'hash_md2' AND type = 'wiki_link'").get() as any;
+    expect(rel.target_hash).toBe("hash_md1");
+  });
+
+  it("resolves wiki link with folder path suffix", () => {
+    db.prepare("INSERT INTO content VALUES ('hash_md3', '# Achievement', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('test', 'specs/achievement.md', 'hash_md3', 'Achievement', 1)").run();
+
+    db.prepare("INSERT INTO content VALUES ('hash_md4', '[[specs/achievement]]', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('test', 'docs/index.md', 'hash_md4', 'Index', 1)").run();
+    saveRelations(db, "hash_md4", [{ type: "wiki_link", targetRef: "specs/achievement" }]);
+
+    const resolved = resolveTargetHashes(db, "test");
+    expect(resolved).toBe(1);
+  });
+});

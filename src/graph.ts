@@ -96,7 +96,42 @@ export function resolveTargetHashes(db: Database, collection: string): number {
     if (!symbolLookup.has(s.name)) symbolLookup.set(s.name, s.hash);
   }
 
+  // Build stem → hash lookup for wiki-link resolution
+  const stemLookup = new Map<string, string>();      // stem → hash
+  const pathStemLookup = new Map<string, string>();   // "dir/stem" → hash
+  const allDocs = db.prepare(
+    "SELECT path, hash FROM documents WHERE collection = ? AND active = 1"
+  ).all(collection) as { path: string; hash: string }[];
+  for (const d of allDocs) {
+    const lastSlash = d.path.lastIndexOf("/");
+    const filename = lastSlash >= 0 ? d.path.substring(lastSlash + 1) : d.path;
+    const dotIdx = filename.lastIndexOf(".");
+    const stem = dotIdx > 0 ? filename.substring(0, dotIdx) : filename;
+    if (!stemLookup.has(stem)) stemLookup.set(stem, d.hash);
+    // Also store path without extension for path-suffix matching
+    const pathWithoutExt = dotIdx > 0 ? d.path.substring(0, d.path.lastIndexOf(".")) : d.path;
+    pathStemLookup.set(pathWithoutExt, d.hash);
+  }
+
   for (const rel of unresolved) {
+    // Wiki-link resolution: match against document filename stems
+    if (rel.type === "wiki_link") {
+      // Try path suffix first (for [[specs/achievement]] style)
+      const byPath = pathStemLookup.get(rel.target_ref);
+      if (byPath && byPath !== rel.source_hash) {
+        update.run(byPath, rel.id);
+        resolved++;
+        continue;
+      }
+      // Then try stem match (for [[settings]] style)
+      const byStem = stemLookup.get(rel.target_ref);
+      if (byStem && byStem !== rel.source_hash) {
+        update.run(byStem, rel.id);
+        resolved++;
+      }
+      continue;
+    }
+
     // Get the source document's path to resolve relative imports
     const sourceDoc = db.prepare(
       "SELECT path FROM documents WHERE hash = ? AND collection = ? AND active = 1 LIMIT 1"
