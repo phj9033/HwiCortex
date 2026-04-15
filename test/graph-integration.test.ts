@@ -130,4 +130,32 @@ describe("reindex with graph extraction", () => {
     expect(kinds).toContain("code");
     expect(kinds).toContain("doc");
   });
+
+  it("extracts C# symbols and resolves inheritance by symbol name", async () => {
+    writeFileSync(join(tempDir, "Base.cs"), `
+public class BaseController : MonoBehaviour {
+    public virtual void Init() {}
+}
+`);
+    writeFileSync(join(tempDir, "Player.cs"), `
+using UnityEngine;
+public class PlayerController : BaseController {
+    public override void Init() {}
+}
+`);
+
+    await reindexCollection(store, tempDir, "**/*.cs", "test-col");
+
+    // Symbols extracted
+    const symbols = db.prepare("SELECT name, kind FROM symbols").all() as any[];
+    expect(symbols).toContainEqual({ name: "BaseController", kind: "class" });
+    expect(symbols).toContainEqual({ name: "PlayerController", kind: "class" });
+
+    // Extends relation resolved
+    const rel = db.prepare(
+      "SELECT target_hash FROM relations WHERE type = 'extends' AND source_symbol = 'PlayerController'"
+    ).get() as any;
+    expect(rel).toBeTruthy();
+    expect(rel.target_hash).not.toBeNull();
+  });
 });

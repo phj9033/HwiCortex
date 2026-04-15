@@ -154,7 +154,7 @@ export function resolveTargetHashes(db: Database, collection: string): number {
 
     // Try to find a matching document (with various extensions)
     let found = false;
-    const extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", "/index.ts", "/index.js"];
+    const extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".cs", "/index.ts", "/index.js"];
     for (const ext of extensions) {
       const doc = db.prepare(
         "SELECT hash FROM documents WHERE path = ? AND collection = ? AND active = 1 LIMIT 1"
