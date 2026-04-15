@@ -181,4 +181,57 @@ public struct PlayerData {
       expect(result.symbols).toHaveLength(0);
     });
   });
+
+  describe("C# relation extraction", () => {
+    it("extracts using directives as imports", async () => {
+      const code = `using UnityEngine;\nusing System.Collections.Generic;`;
+      const result = await extractSymbolsAndRelations(code, "test.cs");
+      const imports = result.relations.filter(r => r.type === "imports");
+      expect(imports).toContainEqual(
+        expect.objectContaining({ type: "imports", targetRef: "UnityEngine" })
+      );
+      expect(imports).toContainEqual(
+        expect.objectContaining({ type: "imports", targetRef: "System.Collections.Generic" })
+      );
+    });
+
+    it("extracts class inheritance as extends", async () => {
+      const code = `using UnityEngine;\npublic class Player : MonoBehaviour { }`;
+      const result = await extractSymbolsAndRelations(code, "test.cs");
+      expect(result.relations).toContainEqual(
+        expect.objectContaining({ type: "extends", sourceSymbol: "Player", targetRef: "MonoBehaviour" })
+      );
+    });
+
+    it("extracts interface implementation as implements", async () => {
+      const code = `public class Player : MonoBehaviour, IDamageable, ISerializable { }`;
+      const result = await extractSymbolsAndRelations(code, "test.cs");
+      expect(result.relations).toContainEqual(
+        expect.objectContaining({ type: "implements", sourceSymbol: "Player", targetRef: "IDamageable" })
+      );
+      expect(result.relations).toContainEqual(
+        expect.objectContaining({ type: "implements", sourceSymbol: "Player", targetRef: "ISerializable" })
+      );
+      // MonoBehaviour is a class (no I prefix) → extends
+      expect(result.relations).toContainEqual(
+        expect.objectContaining({ type: "extends", sourceSymbol: "Player", targetRef: "MonoBehaviour" })
+      );
+    });
+
+    it("extracts RequireComponent attribute as uses_type", async () => {
+      const code = `[RequireComponent(typeof(Rigidbody))]\npublic class Player : MonoBehaviour { }`;
+      const result = await extractSymbolsAndRelations(code, "test.cs");
+      expect(result.relations).toContainEqual(
+        expect.objectContaining({ type: "uses_type", targetRef: "Rigidbody" })
+      );
+    });
+
+    it("extracts Resources.Load<T> as uses_type", async () => {
+      const code = `public class Loader { void Load() { Resources.Load<PlayerData>("path"); } }`;
+      const result = await extractSymbolsAndRelations(code, "test.cs");
+      expect(result.relations).toContainEqual(
+        expect.objectContaining({ type: "uses_type", targetRef: "PlayerData" })
+      );
+    });
+  });
 });
