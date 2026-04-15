@@ -83,6 +83,8 @@ export function generateRelationPage(db: Database, hash: string): string {
   const relatedLinks = [...new Set([
     ...graph.imports.map(r => resolveToStem(db, r.target_hash)),
     ...graph.importedBy.map(r => resolveToStem(db, r.source_hash)),
+    ...graph.wikiLinks.map(r => resolveToStem(db, r.target_hash)),
+    ...graph.wikiLinkedBy.map(r => resolveToStem(db, r.source_hash)),
   ])].filter(Boolean);
 
   lines.push("---");
@@ -130,7 +132,24 @@ export function generateRelationPage(db: Database, hash: string): string {
     lines.push(`- implements: ${graph.implements.map(r => r.target_ref).join(", ")}`);
   }
 
-  if (graph.imports.length === 0 && graph.importedBy.length === 0 && graph.extends.length === 0 && graph.implements.length === 0) {
+  if (graph.wikiLinks.length > 0) {
+    lines.push("");
+    lines.push("## Wiki Links");
+    for (const r of graph.wikiLinks) {
+      const s = resolveToStem(db, r.target_hash);
+      lines.push(s ? `- [[${s}]]` : `- ${r.target_ref}`);
+    }
+  }
+  if (graph.wikiLinkedBy.length > 0) {
+    lines.push("");
+    lines.push("## Linked By");
+    for (const r of graph.wikiLinkedBy) {
+      const s = resolveToStem(db, r.source_hash);
+      lines.push(s ? `- [[${s}]]` : "- unknown");
+    }
+  }
+
+  if (graph.imports.length === 0 && graph.importedBy.length === 0 && graph.extends.length === 0 && graph.implements.length === 0 && graph.wikiLinks.length === 0 && graph.wikiLinkedBy.length === 0) {
     lines.push("- (no relations)");
   }
 
@@ -154,11 +173,13 @@ export async function writeObsidianGraph(db: Database, vaultPath: string, projec
   mkdirSync(graphDir, { recursive: true });
 
   // Write cluster pages
-  const clusters = db.prepare("SELECT id, name FROM clusters WHERE collection = ?").all(project) as { id: number; name: string }[];
+  const clusters = db.prepare("SELECT id, name, kind FROM clusters WHERE collection = ?").all(project) as { id: number; name: string; kind: string }[];
   for (const cluster of clusters) {
+    const subdir = cluster.kind === "doc" ? join(clusterDir, "doc") : join(clusterDir, "code");
+    mkdirSync(subdir, { recursive: true });
     const members = db.prepare("SELECT hash FROM cluster_members WHERE cluster_id = ?").all(cluster.id) as { hash: string }[];
     const page = generateClusterPage(db, cluster.name, members.map(m => m.hash));
-    writeFileSync(join(clusterDir, `${cluster.name}.md`), page);
+    writeFileSync(join(subdir, `${cluster.name}.md`), page);
   }
 
   // Write file relation pages

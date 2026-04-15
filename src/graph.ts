@@ -30,6 +30,8 @@ export interface FileGraphInfo {
   implementedBy: RelationRow[];
   calls: RelationRow[];
   calledBy: RelationRow[];
+  wikiLinks: RelationRow[];
+  wikiLinkedBy: RelationRow[];
   cluster?: string;
 }
 
@@ -212,6 +214,8 @@ export function getFileGraph(db: Database, hash: string): FileGraphInfo {
     implementedBy: incoming.filter(r => r.type === "implements"),
     calls: outgoing.filter(r => r.type === "calls"),
     calledBy: incoming.filter(r => r.type === "calls"),
+    wikiLinks: outgoing.filter(r => r.type === "wiki_link"),
+    wikiLinkedBy: incoming.filter(r => r.type === "wiki_link"),
     cluster: clusterRow?.name,
   };
 }
