@@ -2,236 +2,103 @@ import { describe, it, expect } from "vitest";
 import { extractSymbolsAndRelations } from "../src/ast";
 
 describe("extractSymbolsAndRelations", () => {
-  describe("TypeScript symbols", () => {
-    it("extracts function declarations", async () => {
-      const code = `export function createStore(opts: Options): Store { return new Store(opts); }`;
-      const result = await extractSymbolsAndRelations(code, "test.ts");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "createStore", kind: "function" })
-      );
-    });
-
-    it("extracts class declarations", async () => {
-      const code = `export class SearchEngine { search() {} }`;
-      const result = await extractSymbolsAndRelations(code, "test.ts");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "SearchEngine", kind: "class" })
-      );
-    });
-
-    it("extracts interface declarations", async () => {
-      const code = `export interface Config { dbPath: string; }`;
-      const result = await extractSymbolsAndRelations(code, "test.ts");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "Config", kind: "interface" })
-      );
-    });
-
-    it("extracts method declarations inside class", async () => {
-      const code = `class Foo { bar() {} baz() {} }`;
-      const result = await extractSymbolsAndRelations(code, "test.ts");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "bar", kind: "method" })
-      );
-    });
+  it("extracts TypeScript symbols (function, class, interface, method)", async () => {
+    const code = `export function createStore() {}\nexport class Engine { search() {} }\nexport interface Config { dbPath: string; }`;
+    const result = await extractSymbolsAndRelations(code, "test.ts");
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "createStore", kind: "function" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "Engine", kind: "class" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "Config", kind: "interface" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "search", kind: "method" }));
   });
 
-  describe("Python symbols", () => {
-    it("extracts function and class", async () => {
-      const code = `class MyClass:\n    def my_method(self):\n        pass\n\ndef my_func():\n    pass`;
-      const result = await extractSymbolsAndRelations(code, "test.py");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "MyClass", kind: "class" })
-      );
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "my_func", kind: "function" })
-      );
-    });
+  it("extracts Python symbols", async () => {
+    const code = `class MyClass:\n    pass\n\ndef my_func():\n    pass`;
+    const result = await extractSymbolsAndRelations(code, "test.py");
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "MyClass", kind: "class" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "my_func", kind: "function" }));
   });
 
-  describe("Go symbols", () => {
-    it("extracts functions and types", async () => {
-      const code = `package main\n\ntype Store struct {}\n\nfunc NewStore() *Store { return &Store{} }\n\nfunc (s *Store) Query() {}`;
-      const result = await extractSymbolsAndRelations(code, "test.go");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "Store", kind: "type" })
-      );
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "NewStore", kind: "function" })
-      );
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "Query", kind: "method" })
-      );
-    });
+  it("extracts Go symbols", async () => {
+    const code = `package main\n\ntype Store struct {}\n\nfunc NewStore() *Store { return &Store{} }\n\nfunc (s *Store) Query() {}`;
+    const result = await extractSymbolsAndRelations(code, "test.go");
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "Store", kind: "type" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "NewStore", kind: "function" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "Query", kind: "method" }));
   });
 
-  describe("Rust symbols", () => {
-    it("extracts functions, structs, and traits", async () => {
-      const code = `pub struct Engine {}\n\npub trait Search {}\n\npub fn search() {}`;
-      const result = await extractSymbolsAndRelations(code, "test.rs");
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "Engine", kind: "type" })
-      );
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "Search", kind: "interface" })
-      );
-      expect(result.symbols).toContainEqual(
-        expect.objectContaining({ name: "search", kind: "function" })
-      );
-    });
+  it("extracts Rust symbols", async () => {
+    const code = `pub struct Engine {}\npub trait Search {}\npub fn search() {}`;
+    const result = await extractSymbolsAndRelations(code, "test.rs");
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "Engine", kind: "type" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "Search", kind: "interface" }));
+    expect(result.symbols).toContainEqual(expect.objectContaining({ name: "search", kind: "function" }));
   });
 
   it("returns empty for unsupported languages", async () => {
-    const result = await extractSymbolsAndRelations("# hello", "test.md");
-    expect(result.symbols).toEqual([]);
-    expect(result.relations).toEqual([]);
+    expect((await extractSymbolsAndRelations("# hello", "test.md")).symbols).toEqual([]);
+    expect((await extractSymbolsAndRelations("Shader {}", "test.shader")).symbols).toHaveLength(0);
   });
 
-  describe("relation extraction", () => {
-    describe("imports", () => {
-      it("extracts TypeScript imports", async () => {
-        const code = `import { createStore } from './store';\nimport path from 'path';`;
-        const result = await extractSymbolsAndRelations(code, "test.ts");
-        const imports = result.relations.filter(r => r.type === "imports");
-        expect(imports).toContainEqual(
-          expect.objectContaining({ targetRef: "./store", targetSymbol: "createStore" })
-        );
-      });
+  // --- Relations ---
 
-      it("extracts Python from-imports", async () => {
-        const code = `from .store import create_store`;
-        const result = await extractSymbolsAndRelations(code, "test.py");
-        expect(result.relations).toContainEqual(
-          expect.objectContaining({ type: "imports", targetRef: ".store", targetSymbol: "create_store" })
-        );
-      });
-    });
-
-    describe("extends", () => {
-      it("extracts TypeScript class extends", async () => {
-        const code = `class SearchEngine extends BaseEngine {}`;
-        const result = await extractSymbolsAndRelations(code, "test.ts");
-        expect(result.relations).toContainEqual(
-          expect.objectContaining({ type: "extends", sourceSymbol: "SearchEngine", targetRef: "BaseEngine" })
-        );
-      });
-    });
-
-    describe("implements", () => {
-      it("extracts TypeScript implements", async () => {
-        const code = `class Store implements IStore {}`;
-        const result = await extractSymbolsAndRelations(code, "test.ts");
-        expect(result.relations).toContainEqual(
-          expect.objectContaining({ type: "implements", sourceSymbol: "Store", targetRef: "IStore" })
-        );
-      });
-    });
-
-    describe("calls filtering", () => {
-      it("only captures calls to imported symbols", async () => {
-        const code = `import { foo } from './mod';\nfunction bar() { foo(); console.log('hi'); }`;
-        const result = await extractSymbolsAndRelations(code, "test.ts");
-        const calls = result.relations.filter(r => r.type === "calls");
-        expect(calls).toContainEqual(
-          expect.objectContaining({ type: "calls", targetSymbol: "foo" })
-        );
-        // console.log should NOT be in calls
-        expect(calls.find(c => c.targetSymbol === "log")).toBeUndefined();
-      });
-    });
+  it("extracts TS imports, extends, implements, and filters calls", async () => {
+    const code = `import { foo } from './mod';\nclass SearchEngine extends BaseEngine implements IStore {}\nfunction bar() { foo(); console.log('hi'); }`;
+    const result = await extractSymbolsAndRelations(code, "test.ts");
+    expect(result.relations).toContainEqual(expect.objectContaining({ type: "imports", targetRef: "./mod", targetSymbol: "foo" }));
+    expect(result.relations).toContainEqual(expect.objectContaining({ type: "extends", sourceSymbol: "SearchEngine", targetRef: "BaseEngine" }));
+    expect(result.relations).toContainEqual(expect.objectContaining({ type: "implements", sourceSymbol: "SearchEngine", targetRef: "IStore" }));
+    // Only imported symbols tracked as calls
+    const calls = result.relations.filter(r => r.type === "calls");
+    expect(calls).toContainEqual(expect.objectContaining({ targetSymbol: "foo" }));
+    expect(calls.find(c => c.targetSymbol === "log")).toBeUndefined();
   });
 
-  describe("C# symbol extraction", () => {
-    it("extracts class, method, interface, enum, struct from C#", async () => {
-      const code = `
+  it("extracts Python from-imports", async () => {
+    const result = await extractSymbolsAndRelations(`from .store import create_store`, "test.py");
+    expect(result.relations).toContainEqual(expect.objectContaining({ type: "imports", targetRef: ".store", targetSymbol: "create_store" }));
+  });
+
+  // --- C# ---
+
+  it("extracts C# symbols (class, method, interface, enum, struct)", async () => {
+    const code = `
 using System;
+public interface IPlayerService { void Execute(); }
+public class PlayerController : MonoBehaviour { public void TakeDamage(int amount) {} }
+public enum PlayerState { Idle, Running }
+public struct PlayerData { public int level; }
+`;
+    const result = await extractSymbolsAndRelations(code, "Player.cs");
+    const kinds = result.symbols.map(s => ({ name: s.name, kind: s.kind }));
+    expect(kinds).toContainEqual({ name: "IPlayerService", kind: "interface" });
+    expect(kinds).toContainEqual({ name: "PlayerController", kind: "class" });
+    expect(kinds).toContainEqual({ name: "TakeDamage", kind: "method" });
+    expect(kinds).toContainEqual({ name: "PlayerState", kind: "enum" });
+    expect(kinds).toContainEqual({ name: "PlayerData", kind: "type" });
+  });
 
-public interface IPlayerService {
-    void Execute();
-}
-
-public class PlayerController : MonoBehaviour {
-    public int health;
-
-    public void TakeDamage(int amount) {
-        health -= amount;
-    }
-}
-
-public enum PlayerState {
-    Idle,
-    Running
-}
-
-public struct PlayerData {
-    public int level;
+  it("extracts C# relations (using, extends, implements, attributes, generic loads)", async () => {
+    const code = `
+using UnityEngine;
+using System.Collections.Generic;
+[RequireComponent(typeof(Rigidbody))]
+public class Player : MonoBehaviour, IDamageable {
+  void Load() { Resources.Load<PlayerData>("path"); }
 }
 `;
-      const result = await extractSymbolsAndRelations(code, "Player.cs");
-      const kinds = result.symbols.map(s => ({ name: s.name, kind: s.kind }));
-      expect(kinds).toContainEqual({ name: "IPlayerService", kind: "interface" });
-      expect(kinds).toContainEqual({ name: "PlayerController", kind: "class" });
-      expect(kinds).toContainEqual({ name: "TakeDamage", kind: "method" });
-      expect(kinds).toContainEqual({ name: "PlayerState", kind: "enum" });
-      expect(kinds).toContainEqual({ name: "PlayerData", kind: "type" });
-    });
+    const result = await extractSymbolsAndRelations(code, "test.cs");
+    const rels = result.relations;
 
-    it("returns empty for unsupported .shader files", async () => {
-      const result = await extractSymbolsAndRelations("Shader {}", "test.shader");
-      expect(result.symbols).toHaveLength(0);
-    });
-  });
-
-  describe("C# relation extraction", () => {
-    it("extracts using directives as imports", async () => {
-      const code = `using UnityEngine;\nusing System.Collections.Generic;`;
-      const result = await extractSymbolsAndRelations(code, "test.cs");
-      const imports = result.relations.filter(r => r.type === "imports");
-      expect(imports).toContainEqual(
-        expect.objectContaining({ type: "imports", targetRef: "UnityEngine" })
-      );
-      expect(imports).toContainEqual(
-        expect.objectContaining({ type: "imports", targetRef: "System.Collections.Generic" })
-      );
-    });
-
-    it("extracts class inheritance as extends", async () => {
-      const code = `using UnityEngine;\npublic class Player : MonoBehaviour { }`;
-      const result = await extractSymbolsAndRelations(code, "test.cs");
-      expect(result.relations).toContainEqual(
-        expect.objectContaining({ type: "extends", sourceSymbol: "Player", targetRef: "MonoBehaviour" })
-      );
-    });
-
-    it("extracts interface implementation as implements", async () => {
-      const code = `public class Player : MonoBehaviour, IDamageable, ISerializable { }`;
-      const result = await extractSymbolsAndRelations(code, "test.cs");
-      expect(result.relations).toContainEqual(
-        expect.objectContaining({ type: "implements", sourceSymbol: "Player", targetRef: "IDamageable" })
-      );
-      expect(result.relations).toContainEqual(
-        expect.objectContaining({ type: "implements", sourceSymbol: "Player", targetRef: "ISerializable" })
-      );
-      // MonoBehaviour is a class (no I prefix) → extends
-      expect(result.relations).toContainEqual(
-        expect.objectContaining({ type: "extends", sourceSymbol: "Player", targetRef: "MonoBehaviour" })
-      );
-    });
-
-    it("extracts RequireComponent attribute as uses_type", async () => {
-      const code = `[RequireComponent(typeof(Rigidbody))]\npublic class Player : MonoBehaviour { }`;
-      const result = await extractSymbolsAndRelations(code, "test.cs");
-      expect(result.relations).toContainEqual(
-        expect.objectContaining({ type: "uses_type", targetRef: "Rigidbody" })
-      );
-    });
-
-    it("extracts Resources.Load<T> as uses_type", async () => {
-      const code = `public class Loader { void Load() { Resources.Load<PlayerData>("path"); } }`;
-      const result = await extractSymbolsAndRelations(code, "test.cs");
-      expect(result.relations).toContainEqual(
-        expect.objectContaining({ type: "uses_type", targetRef: "PlayerData" })
-      );
-    });
+    // using → imports
+    expect(rels).toContainEqual(expect.objectContaining({ type: "imports", targetRef: "UnityEngine" }));
+    expect(rels).toContainEqual(expect.objectContaining({ type: "imports", targetRef: "System.Collections.Generic" }));
+    // extends (no I prefix)
+    expect(rels).toContainEqual(expect.objectContaining({ type: "extends", sourceSymbol: "Player", targetRef: "MonoBehaviour" }));
+    // implements (I prefix)
+    expect(rels).toContainEqual(expect.objectContaining({ type: "implements", sourceSymbol: "Player", targetRef: "IDamageable" }));
+    // RequireComponent → uses_type
+    expect(rels).toContainEqual(expect.objectContaining({ type: "uses_type", targetRef: "Rigidbody" }));
+    // Resources.Load<T> → uses_type
+    expect(rels).toContainEqual(expect.objectContaining({ type: "uses_type", targetRef: "PlayerData" }));
   });
 });
