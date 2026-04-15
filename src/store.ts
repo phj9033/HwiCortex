@@ -1272,6 +1272,20 @@ export async function reindexCollection(
       }
     }
 
+    // Wiki-link extraction for markdown files
+    if (relativeFile.endsWith(".md")) {
+      const existingWikiRels = db.prepare(
+        "SELECT 1 FROM relations WHERE source_hash = ? AND type = 'wiki_link' LIMIT 1"
+      ).get(hash);
+      if (!existingWikiRels) {
+        const { extractWikiLinks } = await import("./wikilinks.js");
+        const wikiRelations = extractWikiLinks(content);
+        if (wikiRelations.length > 0) {
+          saveRelations(db, hash, wikiRelations);
+        }
+      }
+    }
+
     processed++;
     options?.onProgress?.({ file: relativeFile, current: processed, total });
   }
@@ -1300,9 +1314,16 @@ export async function reindexCollection(
 
   // Resolve target hashes and run clustering
   resolveTargetHashes(db, collectionName);
-  const clusters = detectClusters(db, collectionName);
-  if (clusters.length > 0) {
-    saveClusters(db, collectionName, nameClusters(db, clusters));
+
+  const CODE_RELATION_TYPES = ["imports", "calls", "extends", "implements", "uses_type"];
+  const codeClusters = detectClusters(db, collectionName, { relationTypes: CODE_RELATION_TYPES });
+  if (codeClusters.length > 0) {
+    saveClusters(db, collectionName, nameClusters(db, codeClusters), "code");
+  }
+
+  const docClusters = detectClusters(db, collectionName, { relationTypes: ["wiki_link"] });
+  if (docClusters.length > 0) {
+    saveClusters(db, collectionName, nameClusters(db, docClusters), "doc");
   }
 
   const orphanedCleaned = cleanupOrphanedContent(db);
@@ -1991,6 +2012,12 @@ export function deleteInactiveDocuments(db: Database): number {
  * Returns the number of orphaned content hashes deleted.
  */
 export function cleanupOrphanedContent(db: Database): number {
+  const orphanHashSubquery = `SELECT hash FROM content WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)`;
+  db.exec(`DELETE FROM cluster_members WHERE hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM relations WHERE source_hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM symbols WHERE hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM content_vectors WHERE hash IN (${orphanHashSubquery})`);
+
   const result = db.prepare(`
     DELETE FROM content
     WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)
@@ -2674,7 +2701,14 @@ export function removeCollection(db: Database, collectionName: string): { delete
   // Delete documents from database
   const docResult = db.prepare(`DELETE FROM documents WHERE collection = ?`).run(collectionName);
 
-  // Clean up orphaned content hashes
+  // Clean up graph tables referencing orphaned content hashes
+  const orphanHashSubquery = `SELECT hash FROM content WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)`;
+  db.exec(`DELETE FROM cluster_members WHERE hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM relations WHERE source_hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM symbols WHERE hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM content_vectors WHERE hash IN (${orphanHashSubquery})`);
+
+  // Clean up orphaned content hashes (now safe after removing FK dependents)
   const cleanupResult = db.prepare(`
     DELETE FROM content
     WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)

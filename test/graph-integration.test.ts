@@ -104,4 +104,30 @@ describe("reindex with graph extraction", () => {
 
     expect(secondCount).toBe(firstCount);
   });
+
+  it("extracts wiki links from markdown files", async () => {
+    writeFileSync(join(tempDir, "a.md"), "# Page A\nSee [[b]] for more.");
+    writeFileSync(join(tempDir, "b.md"), "# Page B\nContent here.");
+
+    await reindexCollection(store, tempDir, "**/*.md", "test-col");
+
+    const rels = db.prepare(
+      "SELECT type, target_ref FROM relations WHERE type = 'wiki_link'"
+    ).all() as any[];
+    expect(rels).toContainEqual({ type: "wiki_link", target_ref: "b" });
+  });
+
+  it("creates separate code and doc clusters in mixed collection", async () => {
+    writeFileSync(join(tempDir, "a.ts"), `import { foo } from './b';\nexport function bar() { foo(); }`);
+    writeFileSync(join(tempDir, "b.ts"), `export function foo() {}`);
+    writeFileSync(join(tempDir, "x.md"), "# X\nSee [[y]] for details.");
+    writeFileSync(join(tempDir, "y.md"), "# Y\nAlso [[x]].");
+
+    await reindexCollection(store, tempDir, "**/*", "test-col");
+
+    const clusters = db.prepare("SELECT name, kind FROM clusters WHERE collection = 'test-col'").all() as any[];
+    const kinds = clusters.map((c: any) => c.kind);
+    expect(kinds).toContain("code");
+    expect(kinds).toContain("doc");
+  });
 });
