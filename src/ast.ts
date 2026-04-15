@@ -404,7 +404,7 @@ export interface AstSymbol {
  * Reserved for Task 3.
  */
 export interface AstRelation {
-  type: "imports" | "calls" | "extends" | "implements" | "uses_type";
+  type: "imports" | "calls" | "extends" | "implements" | "uses_type" | "wiki_link";
   sourceSymbol?: string;
   targetRef: string;
   targetSymbol?: string;
@@ -673,7 +673,7 @@ export async function extractSymbolsAndRelations(
       for (const importNode of rootNode.descendantsOfType("import_statement")) {
         for (const dottedName of importNode.descendantsOfType("dotted_name")) {
           const targetRef = dottedName.text;
-          const targetSymbol = targetRef.split(".")[0]; // First part is the symbol
+          const targetSymbol = targetRef.split(".")[0] ?? targetRef;
           importedSymbols.add(targetSymbol);
           relations.push({ type: "imports", targetRef, targetSymbol });
         }
@@ -703,7 +703,7 @@ export async function extractSymbolsAndRelations(
           if (pathNode) {
             const targetRef = pathNode.text.slice(1, -1); // Remove quotes
             const parts = targetRef.split("/");
-            const targetSymbol = parts[parts.length - 1];
+            const targetSymbol = parts[parts.length - 1] ?? targetRef;
             importedSymbols.add(targetSymbol);
             relations.push({ type: "imports", targetRef, targetSymbol });
           }
@@ -716,7 +716,7 @@ export async function extractSymbolsAndRelations(
         // Simple extraction: extract the last part after ::
         const parts = text.split("::");
         if (parts.length > 0) {
-          const lastPart = parts[parts.length - 1].replace(/[;{}\s]/g, "");
+          const lastPart = parts[parts.length - 1]?.replace(/[;{}\s]/g, "");
           if (lastPart) {
             importedSymbols.add(lastPart);
             relations.push({ type: "imports", targetRef: text, targetSymbol: lastPart });
