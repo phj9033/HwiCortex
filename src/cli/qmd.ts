@@ -2592,6 +2592,7 @@ function parseCLI() {
       // Graph options
       "no-graph": { type: "boolean", default: false },
       obsidian: { type: "boolean" },
+      kind: { type: "string" },
       // HwiCortex options
       source: { type: "string" },        // --source docs|sessions|knowledge
       mode: { type: "string" },          // --mode bm25|hybrid
@@ -3497,7 +3498,10 @@ if (isMain) {
     case "graph": {
       const store = getStore();
       const subcmd = cli.args[0];
-      const opts = { collection: cli.values.collection as string | undefined };
+      const opts = {
+        collection: cli.values.collection as string | undefined,
+        kind: cli.values.kind as string | undefined
+      };
       if (subcmd === "clusters") {
         console.log(handleClusters(store.db, opts));
       } else if (cli.values.obsidian) {

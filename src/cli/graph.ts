@@ -4,6 +4,7 @@ import { getRelationsForHash, getSymbolUsages, getFileGraph, findPath } from "..
 interface GraphOpts {
   collection?: string;
   json?: boolean;
+  kind?: string;
 }
 
 function resolveFileHash(db: Database, filePath: string, collection?: string): { hash: string; path: string; collection: string } | null {
@@ -42,6 +43,12 @@ export function handleGraph(db: Database, file: string, opts: GraphOpts): string
   }
   if (graph.calledBy.length > 0) {
     lines.push(`  called by: ${graph.calledBy.map(r => resolveHashToPath(db, r.source_hash)).join(", ")}`);
+  }
+  if (graph.wikiLinks.length > 0) {
+    lines.push(`  wiki links: ${graph.wikiLinks.map(r => resolveHashToPath(db, r.target_hash) || r.target_ref).join(", ")}`);
+  }
+  if (graph.wikiLinkedBy.length > 0) {
+    lines.push(`  linked by: ${graph.wikiLinkedBy.map(r => resolveHashToPath(db, r.source_hash)).join(", ")}`);
   }
   if (graph.cluster) {
     lines.push(`  cluster: ${graph.cluster}`);
@@ -82,15 +89,26 @@ export function handleRelated(db: Database, file: string, opts: GraphOpts): stri
     const p = resolveHashToPath(db, r.source_hash);
     if (p) related.add(p);
   }
+  for (const r of graph.wikiLinks) {
+    if (r.target_hash) {
+      const p = resolveHashToPath(db, r.target_hash);
+      if (p) related.add(p);
+    }
+  }
+  for (const r of graph.wikiLinkedBy) {
+    const p = resolveHashToPath(db, r.source_hash);
+    if (p) related.add(p);
+  }
 
-  // Same cluster members
+  // Same cluster members (using cluster_id to avoid cross-kind ambiguity)
   if (graph.cluster) {
     const members = db.prepare(`
-      SELECT d.path FROM cluster_members cm
-      JOIN clusters c ON cm.cluster_id = c.id
+      SELECT DISTINCT d.path FROM cluster_members cm
       JOIN documents d ON cm.hash = d.hash AND d.active = 1
-      WHERE c.name = ? AND cm.hash != ?
-    `).all(graph.cluster, doc.hash) as { path: string }[];
+      WHERE cm.cluster_id IN (
+        SELECT cluster_id FROM cluster_members WHERE hash = ?
+      ) AND cm.hash != ?
+    `).all(doc.hash, doc.hash) as { path: string }[];
     for (const m of members) related.add(m.path);
   }
 
@@ -130,22 +148,41 @@ export function handleSymbol(db: Database, name: string, opts: GraphOpts): strin
 }
 
 export function handleClusters(db: Database, opts: GraphOpts): string {
-  let query = "SELECT c.id, c.name, c.collection, COUNT(cm.hash) as member_count FROM clusters c JOIN cluster_members cm ON c.id = cm.cluster_id";
+  let query = `SELECT c.id, c.name, c.collection, c.kind, COUNT(cm.hash) as member_count
+    FROM clusters c JOIN cluster_members cm ON c.id = cm.cluster_id`;
+  const conditions: string[] = [];
   const params: any[] = [];
+
   if (opts.collection) {
-    query += " WHERE c.collection = ?";
+    conditions.push("c.collection = ?");
     params.push(opts.collection);
   }
-  query += " GROUP BY c.id ORDER BY member_count DESC";
+  if (opts.kind) {
+    conditions.push("c.kind = ?");
+    params.push(opts.kind);
+  }
+  if (conditions.length > 0) {
+    query += " WHERE " + conditions.join(" AND ");
+  }
+  query += " GROUP BY c.id ORDER BY c.kind, member_count DESC";
 
-  const clusters = db.prepare(query).all(...params) as { id: number; name: string; collection: string; member_count: number }[];
+  const clusters = db.prepare(query).all(...params) as {
+    id: number; name: string; collection: string; kind: string; member_count: number;
+  }[];
 
   if (clusters.length === 0) return "No clusters found.";
 
-  const lines = ["Clusters:", ""];
+  const lines: string[] = [];
+  let currentKind = "";
+
   for (const c of clusters) {
+    if (c.kind !== currentKind) {
+      currentKind = c.kind;
+      if (lines.length > 0) lines.push("");
+      lines.push(currentKind === "code" ? "Code Clusters:" : "Doc Clusters:");
+      lines.push("");
+    }
     lines.push(`  ${c.name} (${c.collection}) — ${c.member_count} files`);
-    // List members
     const members = db.prepare(`
       SELECT d.path FROM cluster_members cm
       JOIN documents d ON cm.hash = d.hash AND d.active = 1
