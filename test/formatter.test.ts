@@ -12,7 +12,7 @@ import {
   searchResultsToFiles,
   searchResultsToMarkdown,
   searchResultsToXml,
-  searchResultsToMcpCsv,
+  searchResultsToSimpleCsv,
   formatSearchResults,
   // Document (multi-get) formatters
   documentsToJson,
@@ -133,7 +133,7 @@ describe("search results include context in all formats", () => {
     expect(output).toContain(TEST_CONTEXT);
   });
 
-  test("MCP CSV format includes context", () => {
+  test("simple CSV format includes context", () => {
     const mcpResults = [{
       docid: "dc5590",
       file: "qmd://archive/summit/keynote.md",
@@ -142,7 +142,7 @@ describe("search results include context in all formats", () => {
       context: TEST_CONTEXT,
       snippet: "This is the keynote content.",
     }];
-    const output = searchResultsToMcpCsv(mcpResults);
+    const output = searchResultsToSimpleCsv(mcpResults);
     expect(output).toContain(TEST_CONTEXT);
   });
 

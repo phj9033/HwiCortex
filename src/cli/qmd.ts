@@ -5,7 +5,7 @@ import { execSync, spawn as nodeSpawn } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join as pathJoin, relative as relativePath } from "path";
 import { parseArgs } from "util";
-import { readFileSync, realpathSync, statSync, existsSync, unlinkSync, writeFileSync, openSync, closeSync, mkdirSync, lstatSync, rmSync, symlinkSync, readlinkSync } from "fs";
+import { readFileSync, realpathSync, statSync, existsSync, unlinkSync, writeFileSync, mkdirSync, lstatSync, rmSync, symlinkSync, readlinkSync } from "fs";
 import { createInterface } from "readline/promises";
 import {
   getPwd,
@@ -350,21 +350,6 @@ async function showStatus(): Promise<void> {
   console.log(`Index: ${dbPath}`);
   console.log(`Size:  ${formatBytes(indexSize)}`);
 
-  // MCP daemon status (check PID file liveness)
-  const mcpCacheDir = process.env.XDG_CACHE_HOME
-    ? resolve(process.env.XDG_CACHE_HOME, "qmd")
-    : resolve(homedir(), ".cache", "qmd");
-  const mcpPidPath = resolve(mcpCacheDir, "mcp.pid");
-  if (existsSync(mcpPidPath)) {
-    const mcpPid = parseInt(readFileSync(mcpPidPath, "utf-8").trim());
-    try {
-      process.kill(mcpPid, 0);
-      console.log(`MCP:   ${c.green}running${c.reset} (PID ${mcpPid})`);
-    } catch {
-      unlinkSync(mcpPidPath);
-      // Stale PID file cleaned up silently
-    }
-  }
   console.log("");
 
   console.log(`${c.bold}Documents${c.reset}`);
@@ -2608,10 +2593,6 @@ function parseCLI() {
       stdin: { type: "boolean" },
       "add-source": { type: "string" },
       "vault-dir": { type: "string" },
-      // MCP HTTP transport options
-      http: { type: "boolean" },
-      daemon: { type: "boolean" },
-      port: { type: "string" },
     },
     allowPositionals: true,
     strict: false, // Allow unknown options to pass through
@@ -2805,7 +2786,6 @@ function showHelp(): void {
   console.log("  hwicortex get <file>[:line] [-l N]  - Show a single document, optional line slice");
   console.log("  hwicortex multi-get <pattern>       - Batch fetch via glob or comma-separated list");
   console.log("  hwicortex skill show/install        - Show or install the packaged QMD skill");
-  console.log("  hwicortex mcp                       - Start the MCP server (stdio transport for AI agents)");
   console.log("  hwicortex bench <fixture.json>      - Run search quality benchmarks against a fixture file");
   console.log("");
   console.log("Collections & context:");
@@ -2863,11 +2843,9 @@ function showHelp(): void {
   console.log("    - Each typed line must be single-line text with balanced quotes.");
   console.log("");
   console.log("AI agents & integrations:");
-  console.log("  - Run `hwicortex mcp` to expose the MCP server (stdio) to agents/IDEs.");
   console.log("  - `hwicortex skill install` installs the QMD skill into ./.agents/skills/qmd.");
   console.log("  - Use `hwicortex skill install --global` for ~/.agents/skills/qmd.");
   console.log("  - `hwicortex --skill` is kept as an alias for `hwicortex skill show`.");
-  console.log("  - Advanced: `hwicortex mcp --http ...` and `hwicortex mcp --http --daemon` are optional for custom transports.");
   console.log("");
   console.log("Global options:");
   console.log("  --index <name>             - Use a named index (default: index)");
@@ -3296,92 +3274,6 @@ if (isMain) {
       break;
     }
 
-    case "mcp": {
-      const sub = cli.args[0]; // stop | status | undefined
-
-      // Cache dir for PID/log files — same dir as the index
-      const cacheDir = process.env.XDG_CACHE_HOME
-        ? resolve(process.env.XDG_CACHE_HOME, "qmd")
-        : resolve(homedir(), ".cache", "qmd");
-      const pidPath = resolve(cacheDir, "mcp.pid");
-
-      // Subcommands take priority over flags
-      if (sub === "stop") {
-        if (!existsSync(pidPath)) {
-          console.log("Not running (no PID file).");
-          process.exit(0);
-        }
-        const pid = parseInt(readFileSync(pidPath, "utf-8").trim());
-        try {
-          process.kill(pid, 0); // alive?
-          process.kill(pid, "SIGTERM");
-          unlinkSync(pidPath);
-          console.log(`Stopped QMD MCP server (PID ${pid}).`);
-        } catch {
-          unlinkSync(pidPath);
-          console.log("Cleaned up stale PID file (server was not running).");
-        }
-        process.exit(0);
-      }
-
-      if (cli.values.http) {
-        const port = Number(cli.values.port) || 8181;
-
-        if (cli.values.daemon) {
-          // Guard: check if already running
-          if (existsSync(pidPath)) {
-            const existingPid = parseInt(readFileSync(pidPath, "utf-8").trim());
-            try {
-              process.kill(existingPid, 0); // alive?
-              console.error(`Already running (PID ${existingPid}). Run 'hwicortex mcp stop' first.`);
-              process.exit(1);
-            } catch {
-              // Stale PID file — continue
-            }
-          }
-
-          mkdirSync(cacheDir, { recursive: true });
-          const logPath = resolve(cacheDir, "mcp.log");
-          const logFd = openSync(logPath, "w"); // truncate — fresh log per daemon run
-          const selfPath = fileURLToPath(import.meta.url);
-          const spawnArgs = selfPath.endsWith(".ts")
-            ? ["--import", pathJoin(dirname(selfPath), "..", "..", "node_modules", "tsx", "dist", "esm", "index.mjs"), selfPath, "mcp", "--http", "--port", String(port)]
-            : [selfPath, "mcp", "--http", "--port", String(port)];
-          const child = nodeSpawn(process.execPath, spawnArgs, {
-            stdio: ["ignore", logFd, logFd],
-            detached: true,
-          });
-          child.unref();
-          closeSync(logFd); // parent's copy; child inherited the fd
-
-          writeFileSync(pidPath, String(child.pid));
-          console.log(`Started on http://localhost:${port}/mcp (PID ${child.pid})`);
-          console.log(`Logs: ${logPath}`);
-          process.exit(0);
-        }
-
-        // Foreground HTTP mode — remove top-level cursor handlers so the
-        // async cleanup handlers in startMcpHttpServer actually run.
-        process.removeAllListeners("SIGTERM");
-        process.removeAllListeners("SIGINT");
-        const { startMcpHttpServer } = await import("../mcp/server.js");
-        try {
-          await startMcpHttpServer(port);
-        } catch (e: any) {
-          if (e?.code === "EADDRINUSE") {
-            console.error(`Port ${port} already in use. Try a different port with --port.`);
-            process.exit(1);
-          }
-          throw e;
-        }
-      } else {
-        // Default: stdio transport
-        const { startMcpServer } = await import("../mcp/server.js");
-        await startMcpServer();
-      }
-      break;
-    }
-
     case "skill": {
       const subcommand = cli.args[0];
       switch (subcommand) {
@@ -3558,24 +3450,22 @@ if (isMain) {
       process.exit(1);
   }
 
-  if (cli.command !== "mcp") {
-    // Bun v1.2.x has a NAPI finalizer bug: native modules (node-llama-cpp,
-    // better-sqlite3, sqlite-vec) crash with "non-GC-safe function inside a
-    // NAPI finalizer" during dispose or process.exit() GC sweep.
-    // Workaround: close DB safely, then exit via native syscall to bypass
-    // Bun's GC entirely.  All output is already flushed and the SQLite WAL
-    // is auto-checkpointed, so no data is lost.
-    closeDb();
-    // Bun exposes native dlsym; use _exit(2) syscall to skip atexit handlers and GC.
-    // Falls back to SIGKILL if unavailable (shows "killed" in terminal but is safe).
-    try {
-      const { dlopen, suffix } = require("bun:ffi") as any;
-      const lib = dlopen(`libc.${suffix}`, { _exit: { args: ["i32"], returns: "void" } });
-      lib.symbols._exit(0);
-    } catch {
-      // Non-Bun runtimes (tsx/node) don't have bun:ffi — safe to use normal exit
-      process.exit(0);
-    }
+  // Bun v1.2.x has a NAPI finalizer bug: native modules (node-llama-cpp,
+  // better-sqlite3, sqlite-vec) crash with "non-GC-safe function inside a
+  // NAPI finalizer" during dispose or process.exit() GC sweep.
+  // Workaround: close DB safely, then exit via native syscall to bypass
+  // Bun's GC entirely.  All output is already flushed and the SQLite WAL
+  // is auto-checkpointed, so no data is lost.
+  closeDb();
+  // Bun exposes native dlsym; use _exit(2) syscall to skip atexit handlers and GC.
+  // Falls back to SIGKILL if unavailable (shows "killed" in terminal but is safe).
+  try {
+    const { dlopen, suffix } = require("bun:ffi") as any;
+    const lib = dlopen(`libc.${suffix}`, { _exit: { args: ["i32"], returns: "void" } });
+    lib.symbols._exit(0);
+  } catch {
+    // Non-Bun runtimes (tsx/node) don't have bun:ffi — safe to use normal exit
+    process.exit(0);
   }
 
 } // end if (main module)

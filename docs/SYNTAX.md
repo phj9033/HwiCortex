@@ -108,7 +108,7 @@ An optional `intent:` line provides background context to disambiguate ambiguous
 
 - At most one `intent:` line per query document
 - `intent:` cannot appear alone — at least one `lex:`, `vec:`, or `hyde:` line is required
-- Intent is also available via the `--intent` CLI flag or MCP `intent` parameter
+- Intent is also available via the `--intent` CLI flag
 
 ```
 intent: web page load times and Core Web Vitals
@@ -126,40 +126,6 @@ Without intent, "performance" is ambiguous (web-perf? team health? fitness?). Wi
 - At most one `intent:` line per query document; cannot appear alone
 - Empty lines are ignored
 - Leading/trailing whitespace is trimmed
-
-## MCP/HTTP API
-
-The `query` tool accepts a query document:
-
-```json
-{
-  "q": "lex: CAP theorem\nvec: consistency vs availability",
-  "collections": ["docs"],
-  "limit": 10
-}
-```
-
-Or structured format:
-
-```json
-{
-  "searches": [
-    { "type": "lex", "query": "CAP theorem" },
-    { "type": "vec", "query": "consistency vs availability" }
-  ]
-}
-```
-
-With intent:
-
-```json
-{
-  "searches": [
-    { "type": "lex", "query": "performance" }
-  ],
-  "intent": "web page load times and Core Web Vitals"
-}
-```
 
 ## CLI
 

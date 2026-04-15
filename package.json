@@ -31,7 +31,6 @@
     "search": "tsx src/cli/qmd.ts search",
     "vsearch": "tsx src/cli/qmd.ts vsearch",
     "rerank": "tsx src/cli/qmd.ts rerank",
-    "inspector": "npx @modelcontextprotocol/inspector tsx src/cli/qmd.ts mcp",
     "release": "./scripts/release.sh"
   },
   "publishConfig": {
@@ -47,7 +46,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.82.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
     "better-sqlite3": "12.8.0",
     "chokidar": "^5.0.0",
     "fast-glob": "3.3.3",
@@ -106,7 +104,6 @@
     "bm25",
     "embeddings",
     "rag",
-    "mcp",
     "reranking",
     "knowledge-base",
     "knowledge-extraction",

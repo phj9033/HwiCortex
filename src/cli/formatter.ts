@@ -212,9 +212,9 @@ export function searchResultsToXml(
 }
 
 /**
- * Format search results for MCP (simpler CSV format with pre-extracted snippets)
+ * Format search results as CSV (simpler format with pre-extracted snippets)
  */
-export function searchResultsToMcpCsv(
+export function searchResultsToSimpleCsv(
   results: { docid: string; file: string; title: string; score: number; context: string | null; snippet: string }[]
 ): string {
   const header = "docid,file,title,score,context,snippet";

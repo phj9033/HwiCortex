@@ -1,239 +1,100 @@
 # HwiCortex
 
-Use Bun instead of Node.js (`bun` not `node`, `bun install` not `npm install`).
+Bun 사용 (`bun`, `bun install`, `bun run build`). Node.js/npm 사용 금지.
 
-## Commands
+## 절대 하지 말 것
 
-```sh
-hwicortex collection add . --name <n>   # Create/index collection
-hwicortex collection list               # List all collections with details
-hwicortex collection remove <name>      # Remove a collection by name
-hwicortex collection rename <old> <new> # Rename a collection
-hwicortex ls [collection[/path]]        # List collections or files in a collection
-hwicortex context add [path] "text"     # Add context for path (defaults to current dir)
-hwicortex context list                  # List all contexts
-hwicortex context check                 # Check for collections/paths missing context
-hwicortex context rm <path>             # Remove context
-hwicortex get <file>                    # Get document by path or docid (#abc123)
-hwicortex multi-get <pattern>           # Get multiple docs by glob or comma-separated list
-hwicortex status                        # Show index status and collections
-hwicortex update [--pull]               # Re-index all collections (--pull: git pull first)
-hwicortex embed                         # Generate vector embeddings (uses node-llama-cpp)
-hwicortex query <query>                 # Search with query expansion + reranking (recommended)
-hwicortex search <query>                # Full-text keyword search (BM25, no LLM)
-hwicortex vsearch <query>               # Vector similarity search (no reranking)
-hwicortex mcp                           # Start MCP server (stdio transport)
-hwicortex mcp --http [--port N]         # Start MCP server (HTTP, default port 8181)
-hwicortex mcp --http --daemon           # Start as background daemon
-hwicortex mcp stop                      # Stop background MCP daemon
-hwicortex graph <file>                  # Show file relationships (imports, calls, cluster)
-hwicortex path <fileA> <fileB>          # Find connection path between files
-hwicortex related <file>                # Show related files (direct + cluster)
-hwicortex symbol <name>                 # Find where a symbol is defined and used
-hwicortex graph clusters [--collection] [--kind code|doc] # List auto-detected module clusters
-hwicortex graph --obsidian              # Generate Obsidian cluster/relation pages
-```
+- `hwicortex collection add`, `hwicortex embed`, `hwicortex update`, `hwicortex extract` 자동 실행 금지 — 예시 명령어만 제시
+- SQLite DB 직접 수정 금지 (인덱스: `~/.cache/qmd/index.sqlite`)
+- `bun build --compile` 금지 — sqlite-vec 깨짐. `bin/hwicortex`는 셸 래퍼이므로 교체 금지
 
-## Collection Management
+## 빌드 & 테스트
 
 ```sh
-# List all collections
-hwicortex collection list
-
-# Create a collection with explicit name
-hwicortex collection add ~/Documents/notes --name mynotes --mask '**/*.md'
-
-# Remove a collection
-hwicortex collection remove mynotes
-
-# Rename a collection
-hwicortex collection rename mynotes my-notes
-
-# List all files in a collection
-hwicortex ls mynotes
-
-# List files with a path prefix
-hwicortex ls journals/2025
-hwicortex ls qmd://journals/2025
+bun install && bun run build    # TypeScript → dist/
+bun link                        # 글로벌 CLI 등록
+bun src/cli/qmd.ts <command>    # 소스에서 직접 실행 (빌드 불필요)
+npx vitest run --reporter=verbose test/
 ```
 
-## Context Management
+## CLI 레퍼런스
 
 ```sh
-# Add context to current directory (auto-detects collection)
-hwicortex context add "Description of these files"
+# 컬렉션
+collection add <path> --name <n> [--mask <glob>]
+collection list | remove <name> | rename <old> <new>
+ls [collection[/path]]
 
-# Add context to a specific path
-hwicortex context add /subfolder "Description for subfolder"
+# 검색
+query <query>           # 하이브리드 (확장 + BM25 + 벡터 + 리랭킹)
+search <query>          # BM25 키워드 (LLM 불필요)
+vsearch <query>         # 벡터 유사도
 
-# Add global context to all collections (system message)
-hwicortex context add / "Always include this context"
+# 조회
+get <file|#docid>       # 단일 문서
+multi-get <pattern>     # 복수 문서 (glob 또는 쉼표 구분)
 
-# Add context using virtual paths
-hwicortex context add qmd://journals/ "Context for entire journals collection"
-hwicortex context add qmd://journals/2024 "Journal entries from 2024"
+# 인덱스
+status | update [--pull] | embed | pull | cleanup
 
-# List all contexts
-hwicortex context list
+# 컨텍스트
+context add [path] "text" | context list | context check | context rm <path>
 
-# Check for collections or paths without context
-hwicortex context check
+# 코드 그래프
+graph <file> | path <A> <B> | related <file> | symbol <name>
+graph clusters [--collection <n>] [--kind code|doc]
+graph --obsidian
 
-# Remove context
-hwicortex context rm qmd://journals/2024
-hwicortex context rm /  # Remove global context
+# 위키
+wiki create "제목" --project <n> [--tags t1,t2] [--body "..."]
+wiki update | show | rm | list | link | unlink | links | index | reset-importance
+
+# 지식 추출
+ingest <path> [--name <n>] [--pattern <p>]
+extract [--session <id>] [--dry-run]
+watch
+rebuild
 ```
 
-## Document IDs (docid)
-
-Each document has a unique short ID (docid) - the first 6 characters of its content hash.
-Docids are shown in search results as `#abc123` and can be used with `get` and `multi-get`:
+### 자주 쓰는 옵션
 
 ```sh
-# Search returns docid in results
-hwicortex search "query" --json
-# Output: [{"docid": "#abc123", "score": 0.85, "file": "docs/readme.md", ...}]
-
-# Get document by docid
-hwicortex get "#abc123"
-hwicortex get abc123              # Leading # is optional
-
-# Docids also work in multi-get comma-separated lists
-hwicortex multi-get "#abc123, #def456"
+-c, --collection <name>   # 특정 컬렉션만
+-n <num>                  # 결과 수
+--full                    # 전체 내용
+--json | --csv | --md | --xml | --files
+--no-graph                # 그래프 컨텍스트 제외
+--line-numbers            # 줄번호
+--intent <text>           # 검색 의도 힌트
 ```
 
-## Options
+## 아키텍처 요약
 
-```sh
-# Search & retrieval
--c, --collection <name>  # Restrict search to a collection (matches pwd suffix)
--n <num>                 # Number of results
---all                    # Return all matches
---min-score <num>        # Minimum score threshold
---full                   # Show full document content
---line-numbers           # Add line numbers to output
+- **검색**: SQLite FTS5 (BM25) + sqlite-vec (벡터) + RRF + LLM 리랭킹
+- **LLM**: node-llama-cpp 로컬 추론 (임베딩, 리랭킹, 쿼리확장)
+- **청킹**: 900토큰/15% 오버랩, 마크다운 헤딩 경계 우선. `--chunk-strategy auto`로 tree-sitter AST 청킹
+- **한국어**: mecab-ko 형태소 분석 (설치 시 자동 활성화)
+- **그래프**: tree-sitter AST 기반 심볼/관계 추출 → label propagation 클러스터링
+- **위키**: Obsidian 호환 마크다운, importance/hit_count 자동 추적
+- **지식 추출**: AI 세션 파싱 → LLM 기반 인사이트 추출 → 볼트 저장
 
-# Multi-get specific
--l <num>                 # Maximum lines per file
---max-bytes <num>        # Skip files larger than this (default 10KB)
-
-# Output formats (search and multi-get)
---json, --csv, --md, --xml, --files
---no-graph              # Disable graph context in search results
-```
-
-## Build & Install
-
-```sh
-bun install            # Install dependencies
-bun run build          # TypeScript → dist/ (required before bun link)
-bun link               # Install globally as 'hwicortex'
-```
-
-## Development
-
-```sh
-bun src/cli/qmd.ts <command>   # Run from source (no build needed)
-```
-
-## SDK Usage (Library Mode)
-
-Other projects can import hwicortex as a library:
+## SDK
 
 ```typescript
 import { createStore } from "hwicortex";
-
-const store = await createStore({
-  dbPath: "./index.sqlite",
-  config: { collections: { docs: { path: "./docs", pattern: "**/*.md" } } },
-});
+const store = await createStore({ dbPath: "./index.sqlite", config: { collections: { docs: { path: "./docs", pattern: "**/*.md" } } } });
 const results = await store.search({ query: "auth flow" });
 await store.close();
 ```
 
-Entry point: `src/index.ts` → `dist/index.js`. Exports `createStore`, types, and utilities.
+진입점: `src/index.ts` → `dist/index.js`
 
-## Tests
+## 릴리스
 
-All tests live in `test/`. Run everything:
+`/release <version>` 사용. CHANGELOG은 `## [Unreleased]` 아래에 작업 중 기록.
+상세: [skills/release/SKILL.md](skills/release/SKILL.md)
 
-```sh
-npx vitest run --reporter=verbose test/
-bun test --preload ./src/test-preload.ts test/
-```
+## 위키 제안 규칙
 
-## Architecture
-
-- SQLite FTS5 for full-text search (BM25)
-- sqlite-vec for vector similarity search
-- node-llama-cpp for embeddings (embeddinggemma), reranking (qwen3-reranker), and query expansion (Qwen3)
-- Reciprocal Rank Fusion (RRF) for combining results
-- Smart chunking: 900 tokens/chunk with 15% overlap, prefers markdown headings as boundaries
-- AST-aware chunking: use `--chunk-strategy auto` to chunk code files (.ts/.js/.py/.go/.rs) at function/class/import boundaries via tree-sitter. Default is `regex` (existing behavior). Markdown and unknown file types always use regex chunking.
-- Korean morphological analysis via mecab-ko: content morphemes (nouns, verbs, adjectives) are indexed for BM25 so inflected forms match (e.g. "검색" matches "검색했다"). Requires mecab-ko system package; falls back to standard FTS5 tokenization when not installed.
-- Graph extraction: AST-based symbol and relation extraction (imports, calls, extends, implements, uses_type) via tree-sitter. Extracted automatically during `hwicortex update`. No LLM calls required.
-- Calls filtering: only tracks calls to imported symbols within the same collection (excludes stdlib/external).
-- Clustering: label propagation algorithm (pure JS, no external deps) groups related files into modules.
-- Obsidian visualization: `hwicortex graph --obsidian` generates cluster index and file relation pages in `vault/wiki/{project}/`.
-
-## Important: Do NOT run automatically
-
-- Never run `hwicortex collection add`, `hwicortex embed`, or `hwicortex update` automatically
-- Never modify the SQLite database directly
-- Write out example commands for the user to run manually
-- Index is stored at `~/.cache/qmd/index.sqlite`
-
-## Do NOT compile
-
-- Never run `bun build --compile` - it overwrites the shell wrapper and breaks sqlite-vec
-- The `bin/hwicortex` file is a shell script that runs compiled JS from `dist/` - do not replace it
-- `npm run build` compiles TypeScript to `dist/` via `tsc -p tsconfig.build.json`
-
-## Releasing
-
-Use `/release <version>` to cut a release. Full changelog standards,
-release workflow, and git hook setup are documented in the
-[release skill](skills/release/SKILL.md).
-
-Key points:
-- Add changelog entries under `## [Unreleased]` **as you make changes**
-- The release script renames `[Unreleased]` → `[X.Y.Z] - date` at release time
-- Credit external PRs with `#NNN (thanks @username)`
-- GitHub releases roll up the full minor series (e.g. 1.2.0 through 1.2.3)
-
-## Wiki
-
-Wiki pages are stored in `vault/wiki/{project}/` as Obsidian-compatible markdown.
-
-### Commands
-
-```sh
-hwicortex wiki create "Title" --project <name> --tags t1,t2 --body "content"
-hwicortex wiki update "Title" --project <name> --append "more content"
-hwicortex wiki link "A" "B" --project <name>
-hwicortex wiki list [--project <name>] [--tag <tag>]
-hwicortex wiki show "Title" --project <name>
-hwicortex wiki rm "Title" --project <name>
-hwicortex wiki index --project <name>
-hwicortex wiki reset-importance --project <name> | --all [--all-counts]
-```
-
-### Wiki Options
-
-- `--no-count`: Skip importance/hit count tracking (for scripts/automation)
-- `--auto-merge`: Auto-merge into similar page on create (for MCP/SDK)
-- `--force`: Skip similarity check on create
-- `--all-counts`: Reset all counts including hit_count (for reset-importance)
-
-### Wiki Suggestion Guidelines
-
-Suggest saving to wiki when:
-- A bug cause and solution are confirmed
-- An architecture decision is made
-- A reusable configuration or procedure is documented
-- The user says "정리해줘", "기록해줘", or similar
-
-Suggestion format:
-> This looks worth recording in the wiki. Want to save it with `/wiki-save`?
-
-Never auto-execute. Always wait for user approval.
+버그 원인/해법 확정, 아키텍처 결정, 재사용 가능한 절차 문서화 시 위키 저장 제안.
+"정리해줘", "기록해줘" 등의 요청 시에도 제안. 자동 실행 금지 — 항상 승인 대기.

@@ -123,7 +123,7 @@ export type { InternalStore };
 export { extractSnippet, addLineNumbers, DEFAULT_MULTI_GET_MAX_BYTES };
 export type { ChunkStrategy } from "./store.js";
 
-// Re-export getDefaultDbPath for CLI/MCP that need the default database location
+// Re-export getDefaultDbPath for CLI that needs the default database location
 export { getDefaultDbPath } from "./store.js";
 
 // Re-export Maintenance class for CLI housekeeping operations

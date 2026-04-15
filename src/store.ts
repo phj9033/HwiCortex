@@ -3,7 +3,7 @@
  *
  * This module provides all database operations, search functions, and document
  * retrieval for QMD. It returns raw data structures that can be formatted by
- * CLI or MCP consumers.
+ * CLI or SDK consumers.
  *
  * Usage:
  *   const store = createStore("/path/to/db.sqlite");
@@ -3964,7 +3964,7 @@ export function extractSnippet(body: string, query: string, maxLen = 500, chunkP
 }
 
 // =============================================================================
-// Shared helpers (used by both CLI and MCP)
+// Shared helpers (used by CLI and SDK)
 // =============================================================================
 
 /**
@@ -3982,12 +3982,12 @@ export function addLineNumbers(text: string, startLine: number = 1): string {
 // hybridQuery() and vectorSearchQuery() are standalone functions (not Store
 // methods) because they are orchestration over primitives — same rationale as
 // reciprocalRankFusion(). They take a Store as first argument so both CLI
-// and MCP can share the identical pipeline.
+// and SDK can share the identical pipeline.
 // =============================================================================
 
 /**
  * Optional progress hooks for search orchestration.
- * CLI wires these to stderr for user feedback; MCP leaves them unset.
+ * CLI wires these to stderr for user feedback; SDK callers can leave them unset.
  */
 export interface SearchHooks {
   /** BM25 probe found strong signal — expansion will be skipped */
@@ -4434,7 +4434,7 @@ export interface StructuredSearchOptions {
 /**
  * Structured search: execute pre-expanded queries without LLM query expansion.
  *
- * Designed for LLM callers (MCP/HTTP) that generate their own query expansions.
+ * Designed for LLM callers that generate their own query expansions.
  * Skips the internal expandQuery() step — goes directly to:
  *
  * Pipeline:
