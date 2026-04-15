@@ -77,13 +77,24 @@ export function resolveTargetHashes(db: Database, collection: string): number {
   // Match target_ref against documents.path in the same collection
   // Handle relative paths: "./b" should match "src/b.ts", "src/b/index.ts", etc.
   const unresolved = db.prepare(`
-    SELECT r.id, r.source_hash, r.target_ref
+    SELECT r.id, r.source_hash, r.target_ref, r.type, r.target_symbol
     FROM relations r
     WHERE r.target_hash IS NULL
-  `).all() as { id: number; source_hash: string; target_ref: string }[];
+  `).all() as { id: number; source_hash: string; target_ref: string; type: string; target_symbol: string | null }[];
 
   let resolved = 0;
   const update = db.prepare("UPDATE relations SET target_hash = ? WHERE id = ?");
+
+  // Build symbol → hash lookup for symbol-name fallback (used by C# extends/implements/calls)
+  const symbolLookup = new Map<string, string>();
+  const allSymbols = db.prepare(`
+    SELECT s.name, s.hash FROM symbols s
+    JOIN documents d ON s.hash = d.hash
+    WHERE d.collection = ? AND d.active = 1
+  `).all(collection) as { name: string; hash: string }[];
+  for (const s of allSymbols) {
+    if (!symbolLookup.has(s.name)) symbolLookup.set(s.name, s.hash);
+  }
 
   for (const rel of unresolved) {
     // Get the source document's path to resolve relative imports
@@ -105,6 +116,7 @@ export function resolveTargetHashes(db: Database, collection: string): number {
     }
 
     // Try to find a matching document (with various extensions)
+    let found = false;
     const extensions = ["", ".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", "/index.ts", "/index.js"];
     for (const ext of extensions) {
       const doc = db.prepare(
@@ -114,7 +126,17 @@ export function resolveTargetHashes(db: Database, collection: string): number {
       if (doc) {
         update.run(doc.hash, rel.id);
         resolved++;
+        found = true;
         break;
+      }
+    }
+
+    // Symbol-name fallback (only if path resolution didn't find it)
+    if (!found && rel.type !== "imports" && rel.type !== "wiki_link") {
+      const targetHash = symbolLookup.get(rel.target_ref) ?? symbolLookup.get(rel.target_symbol ?? "");
+      if (targetHash && targetHash !== rel.source_hash) {
+        update.run(targetHash, rel.id);
+        resolved++;
       }
     }
   }

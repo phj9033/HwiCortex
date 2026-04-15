@@ -238,3 +238,44 @@ describe("graph storage", () => {
     });
   });
 });
+
+describe("symbol-name resolution fallback", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    // Create base tables needed by migrations
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS content (hash TEXT PRIMARY KEY, doc TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, collection TEXT NOT NULL, path TEXT NOT NULL,
+        title TEXT, hash TEXT NOT NULL, active INTEGER DEFAULT 1, modified_at TEXT, indexed_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS store_collections (
+        name TEXT PRIMARY KEY, path TEXT NOT NULL, pattern TEXT NOT NULL DEFAULT '**/*.md'
+      );
+    `);
+    // Run all migrations including v3
+    runMigrations(db, ":memory:", DEFAULT_MIGRATIONS);
+  });
+
+  afterEach(() => db.close());
+
+  it("resolves extends relation by symbol name when path fails", () => {
+    // File A defines class "BaseController"
+    db.prepare("INSERT INTO content VALUES ('hash_a', 'class BaseController {}', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('test', 'Scripts/BaseController.cs', 'hash_a', 'BaseController', 1)").run();
+    saveSymbols(db, "hash_a", [{ name: "BaseController", kind: "class", line: 1 }]);
+
+    // File B extends BaseController — targetRef is the symbol name, not a path
+    db.prepare("INSERT INTO content VALUES ('hash_b', 'class Player : BaseController {}', datetime('now'))").run();
+    db.prepare("INSERT INTO documents (collection, path, hash, title, active) VALUES ('test', 'Scripts/Player.cs', 'hash_b', 'Player', 1)").run();
+    saveRelations(db, "hash_b", [{ type: "extends", targetRef: "BaseController", sourceSymbol: "Player" }]);
+
+    const resolved = resolveTargetHashes(db, "test");
+    expect(resolved).toBeGreaterThanOrEqual(1);
+
+    const rel = db.prepare("SELECT target_hash FROM relations WHERE source_hash = 'hash_b' AND type = 'extends'").get() as any;
+    expect(rel.target_hash).toBe("hash_a");
+  });
+});
