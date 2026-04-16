@@ -5,7 +5,12 @@
 
 ## Overview
 
-AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전 관련 지식을 검색하여 참고하는 순환 시스템. 4개의 스킬이 기존 `hwicortex` CLI를 조합하여 동작하며, 코드 변경은 `hwicortex update --embed` 플래그 추가 1건만 필요.
+AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전 관련 지식을 검색하여 참고하는 순환 시스템. 4개의 스킬이 기존 `hwicortex` CLI를 조합하여 동작하며, 코드 변경은 최소한으로 제한.
+
+**코드 변경 사항:**
+- `hwicortex update --embed` 플래그 추가
+- `hwicortex wiki list --json` 지원 추가
+- CLAUDE.md에 `--stdin`, `--auto-merge` 플래그 문서화
 
 ## Architecture
 
@@ -66,8 +71,9 @@ AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전
 
 **핵심 원칙:**
 - 검색 결과 없으면 지체 없이 작업 진행 (블로킹하지 않음)
-- 토큰 절약을 위해 원문 로드는 최소한으로
+- 토큰 절약: 원문 로드는 최대 2건, body가 2000토큰 초과 시 스킵
 - wiki show 시 hit_count 자동 증가 → 자주 참조되는 지식의 importance가 자연 증가
+- CLI 에러 발생 시 에러 메시지 출력하고 작업 계속 진행 (블로킹하지 않음)
 
 ### 2. knowledge-post (작업 후 지식 저장)
 
@@ -94,8 +100,8 @@ AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전
       hwicortex wiki update "<title>" --project <project> --append "<새 인사이트>"
 
    B) 유사 문서 없음 → 새 문서 생성
-      hwicortex wiki create "<title>" --project <project> \
-        --tags <tags> --auto-merge --stdin <<< "<body>"
+      echo "<body>" | hwicortex wiki create "<title>" --project <project> \
+        --tags <tags> --auto-merge --stdin
 
 4. 관련 문서 링크
    hwicortex wiki link "<새/업데이트된 문서>" "<관련 문서>" --project <project>
@@ -108,9 +114,10 @@ AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전
 ```
 
 **핵심 원칙:**
-- 승인 없이 자동 저장, 리포트만 출력
+- 승인 없이 자동 저장, 리포트만 출력 (CLAUDE.md의 "자동 실행 금지" 규칙의 명시적 예외 — knowledge-post 스킬에 한함)
 - 저장할 인사이트가 없으면 조용히 종료 (불필요한 출력 없음)
 - 프로젝트명은 현재 작업 디렉토리 컨텍스트에서 추론
+- CLI 에러 발생 시 에러 메시지 출력 후 다음 인사이트 처리 계속
 
 ### 3. knowledge-ingest (세션 배치 처리)
 
@@ -198,17 +205,29 @@ AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전
 
 **핵심 원칙:**
 - 항상 문답 기반 — 자동 삭제/병합 없음
-- 정리 후 hwicortex wiki index로 인덱스 재생성
+- 정리 후 `hwicortex wiki index --project <project>` (위키 목차 재생성) + `hwicortex update --embed` (검색 인덱스 갱신) 둘 다 실행
 
-## Code Change: `hwicortex update --embed`
+## Code Changes
 
-유일한 코드 변경 사항. `hwicortex update` 명령에 `--embed` 플래그를 추가하여, 인덱스 갱신 후 변경된 해시만 자동 임베딩.
+### 1. `hwicortex update --embed` 플래그 추가
 
 **변경 파일:** `src/cli/qmd.ts`
 
 **동작:**
 - `hwicortex update` — 기존과 동일 (인덱스만 갱신)
-- `hwicortex update --embed` — 인덱스 갱신 후 임베딩 필요한 해시만 embed 실행
+- `hwicortex update --embed` — 인덱스 갱신 후, `getHashesNeedingEmbedding(db)`로 임베딩이 없는(null) 청크 해시를 조회하여 해당 해시만 embed 실행
+
+**구현:** update 명령 끝에 `--embed` 플래그 체크 → 기존 `embed` 로직(`generateEmbeddings`) 호출. 전체 재임베딩이 아닌 누락분만 처리하므로 변경이 적을 때는 빠르게 완료.
+
+### 2. `hwicortex wiki list --json` 지원 추가
+
+**변경 파일:** `src/cli/wiki.ts`
+
+현재 `wiki list`는 plain text만 출력. `--json` 플래그 추가하여 title, project, tags, importance를 JSON 배열로 출력. knowledge-tidy 스킬이 구조화된 데이터로 분석하기 위해 필요.
+
+### 3. CLAUDE.md 업데이트
+
+`wiki create` 명령에 `--stdin`, `--auto-merge`, `--force` 플래그 문서화. knowledge-post 스킬의 자동 저장 예외 규칙 추가.
 
 ## Prerequisite: Wiki Collection Setup
 
@@ -229,7 +248,9 @@ hwicortex update --embed
 | `skills/knowledge-post/SKILL.md` | 스킬 | 작업 후 지식 저장 |
 | `skills/knowledge-ingest/SKILL.md` | 스킬 | 세션 배치 처리 |
 | `skills/knowledge-tidy/SKILL.md` | 스킬 | 지식 정리 |
-| `src/cli/qmd.ts` | 코드 변경 | `--embed` 플래그 추가 |
+| `src/cli/qmd.ts` | 코드 변경 | `update --embed` 플래그 추가 |
+| `src/cli/wiki.ts` | 코드 변경 | `wiki list --json` 지원 추가 |
+| `CLAUDE.md` | 문서 갱신 | `--stdin`/`--auto-merge` 플래그 문서화, 자동 저장 예외 규칙 |
 | 설치 가이드 | 문서 | wiki 컬렉션 등록 방법 |
 
 ## Design Decisions
