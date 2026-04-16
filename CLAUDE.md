@@ -35,7 +35,7 @@ get <file|#docid>       # 단일 문서
 multi-get <pattern>     # 복수 문서 (glob 또는 쉼표 구분)
 
 # 인덱스
-status | update [--pull] | embed | pull | cleanup
+status | update [--pull] [--embed] | embed | pull | cleanup
 
 # 컨텍스트
 context add [path] "text" | context list | context check | context rm <path>
@@ -46,7 +46,7 @@ graph clusters [--collection <n>] [--kind code|doc]
 graph --obsidian
 
 # 위키
-wiki create "제목" --project <n> [--tags t1,t2] [--body "..."]
+wiki create "제목" --project <n> [--tags t1,t2] [--body "..."] [--stdin] [--auto-merge] [--force]
 wiki update | show | rm | list | link | unlink | links | index | reset-importance
 
 # 지식 추출
@@ -98,3 +98,14 @@ await store.close();
 
 버그 원인/해법 확정, 아키텍처 결정, 재사용 가능한 절차 문서화 시 위키 저장 제안.
 "정리해줘", "기록해줘" 등의 요청 시에도 제안. 자동 실행 금지 — 항상 승인 대기.
+예외: knowledge-post 스킬은 승인 없이 wiki 저장 및 `hwicortex update --embed` 자동 실행한다 (리포트만 출력).
+
+## 지식 루프 설정
+
+```sh
+# wiki vault를 컬렉션으로 등록 (1회)
+hwicortex collection add <vault>/wiki --name wiki --mask "**/*.md"
+hwicortex update --embed
+```
+
+스킬: `/knowledge-pre`, `/knowledge-post`, `/knowledge-ingest`, `/knowledge-tidy`
