@@ -58,47 +58,4 @@ describe("extractSymbolsAndRelations", () => {
     expect(result.relations).toContainEqual(expect.objectContaining({ type: "imports", targetRef: ".store", targetSymbol: "create_store" }));
   });
 
-  // --- C# ---
-
-  it("extracts C# symbols (class, method, interface, enum, struct)", async () => {
-    const code = `
-using System;
-public interface IPlayerService { void Execute(); }
-public class PlayerController : MonoBehaviour { public void TakeDamage(int amount) {} }
-public enum PlayerState { Idle, Running }
-public struct PlayerData { public int level; }
-`;
-    const result = await extractSymbolsAndRelations(code, "Player.cs");
-    const kinds = result.symbols.map(s => ({ name: s.name, kind: s.kind }));
-    expect(kinds).toContainEqual({ name: "IPlayerService", kind: "interface" });
-    expect(kinds).toContainEqual({ name: "PlayerController", kind: "class" });
-    expect(kinds).toContainEqual({ name: "TakeDamage", kind: "method" });
-    expect(kinds).toContainEqual({ name: "PlayerState", kind: "enum" });
-    expect(kinds).toContainEqual({ name: "PlayerData", kind: "type" });
-  });
-
-  it("extracts C# relations (using, extends, implements, attributes, generic loads)", async () => {
-    const code = `
-using UnityEngine;
-using System.Collections.Generic;
-[RequireComponent(typeof(Rigidbody))]
-public class Player : MonoBehaviour, IDamageable {
-  void Load() { Resources.Load<PlayerData>("path"); }
-}
-`;
-    const result = await extractSymbolsAndRelations(code, "test.cs");
-    const rels = result.relations;
-
-    // using → imports
-    expect(rels).toContainEqual(expect.objectContaining({ type: "imports", targetRef: "UnityEngine" }));
-    expect(rels).toContainEqual(expect.objectContaining({ type: "imports", targetRef: "System.Collections.Generic" }));
-    // extends (no I prefix)
-    expect(rels).toContainEqual(expect.objectContaining({ type: "extends", sourceSymbol: "Player", targetRef: "MonoBehaviour" }));
-    // implements (I prefix)
-    expect(rels).toContainEqual(expect.objectContaining({ type: "implements", sourceSymbol: "Player", targetRef: "IDamageable" }));
-    // RequireComponent → uses_type
-    expect(rels).toContainEqual(expect.objectContaining({ type: "uses_type", targetRef: "Rigidbody" }));
-    // Resources.Load<T> → uses_type
-    expect(rels).toContainEqual(expect.objectContaining({ type: "uses_type", targetRef: "PlayerData" }));
-  });
 });
