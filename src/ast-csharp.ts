@@ -46,7 +46,37 @@ export function extractCSharpSymbolsAndRelations(
     if (name) symbols.push({ name, kind: "type", line: node.startPosition.row + 1 });
   }
 
-  // --- Relation extraction (Task 2, 3 will fill this in) ---
+  // --- Inheritance / Implementation ---
+  for (const classNode of [
+    ...rootNode.descendantsOfType("class_declaration"),
+    ...rootNode.descendantsOfType("struct_declaration"),
+  ]) {
+    const nameNode = classNode.childForFieldName("name");
+    const className = nameNode?.text;
+    if (!className) continue;
+
+    const baseList = classNode.childForFieldName("bases")
+      ?? classNode.descendantsOfType("base_list")[0];
+    if (!baseList) continue;
+
+    for (const base of baseList.namedChildren) {
+      let typeName = base.text;
+      // Strip generic params: Foo<T> -> Foo
+      const genericIdx = typeName.indexOf("<");
+      if (genericIdx > 0) typeName = typeName.substring(0, genericIdx);
+      // Strip namespace prefix: Ns.Foo -> Foo
+      const dotIdx = typeName.lastIndexOf(".");
+      if (dotIdx >= 0) typeName = typeName.substring(dotIdx + 1);
+
+      // I-prefix convention: IFoo = implements, otherwise extends
+      const relType = typeName.startsWith("I")
+        && typeName.length > 1
+        && typeName[1]?.toUpperCase() === typeName[1]
+        ? "implements" : "extends";
+
+      relations.push({ type: relType, sourceSymbol: className, targetRef: typeName });
+    }
+  }
 
   return { symbols, relations };
 }
