@@ -78,5 +78,42 @@ export function extractCSharpSymbolsAndRelations(
     }
   }
 
+  // --- RequireComponent attribute ---
+  for (const attrNode of rootNode.descendantsOfType("attribute")) {
+    const nameNode = attrNode.childForFieldName("name");
+    if (nameNode?.text === "RequireComponent") {
+      const argList = attrNode.descendantsOfType("attribute_argument_list")[0]
+        ?? attrNode.descendantsOfType("argument_list")[0];
+      if (argList) {
+        for (const typeofExpr of argList.descendantsOfType("typeof_expression")) {
+          const typeNode = typeofExpr.namedChildren[0];
+          if (typeNode) {
+            relations.push({ type: "uses_type", targetRef: typeNode.text });
+          }
+        }
+      }
+    }
+  }
+
+  // --- Asset references (generic invocations + InstantiateAsync) ---
+  const ASSET_LOAD_REGEX = /(?:Resources\.Load(?:All)?|Addressables\.LoadAssetAsync|(?:\w+\.)?LoadAsset|(?:\w+\.)?LoadAllAssets)<(\w+)>/;
+
+  for (const invocation of rootNode.descendantsOfType("invocation_expression")) {
+    const funcNode = invocation.childForFieldName("function");
+    if (!funcNode) continue;
+    const funcText = funcNode.text;
+
+    const genericMatch = funcText.match(ASSET_LOAD_REGEX);
+    if (genericMatch?.[1]) {
+      relations.push({ type: "uses_type", targetRef: genericMatch[1] });
+      continue;
+    }
+
+    // Addressables.InstantiateAsync — no generic, always GameObject
+    if (funcText.includes("InstantiateAsync")) {
+      relations.push({ type: "uses_type", targetRef: "GameObject" });
+    }
+  }
+
   return { symbols, relations };
 }

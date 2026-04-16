@@ -78,6 +78,81 @@ public class Foo : MonoBehaviour { }
     expect(imports).toHaveLength(0);
   });
 
+  it("extracts RequireComponent as uses_type", async () => {
+    const code = `
+[RequireComponent(typeof(Rigidbody))]
+public class Player : MonoBehaviour { }
+`;
+    const result = await extractSymbolsAndRelations(code, "Player.cs");
+    const usesType = result.relations.filter(r => r.type === "uses_type");
+    expect(usesType.some(r => r.targetRef === "Rigidbody")).toBe(true);
+  });
+
+  it("extracts Resources.Load<T> as uses_type", async () => {
+    const code = `
+public class Loader : MonoBehaviour {
+    void Start() {
+        var clip = Resources.Load<AudioClip>("sfx/hit");
+    }
+}
+`;
+    const result = await extractSymbolsAndRelations(code, "Loader.cs");
+    const usesType = result.relations.filter(r => r.type === "uses_type");
+    expect(usesType.some(r => r.targetRef === "AudioClip")).toBe(true);
+  });
+
+  it("extracts Addressables.LoadAssetAsync<T> as uses_type", async () => {
+    const code = `
+public class Loader : MonoBehaviour {
+    async void Start() {
+        var handle = Addressables.LoadAssetAsync<GameObject>(key);
+    }
+}
+`;
+    const result = await extractSymbolsAndRelations(code, "Loader.cs");
+    const usesType = result.relations.filter(r => r.type === "uses_type");
+    expect(usesType.some(r => r.targetRef === "GameObject")).toBe(true);
+  });
+
+  it("extracts AssetBundle.LoadAsset<T> as uses_type", async () => {
+    const code = `
+public class Loader : MonoBehaviour {
+    void Start() {
+        var tex = bundle.LoadAsset<Texture2D>("main");
+    }
+}
+`;
+    const result = await extractSymbolsAndRelations(code, "Loader.cs");
+    const usesType = result.relations.filter(r => r.type === "uses_type");
+    expect(usesType.some(r => r.targetRef === "Texture2D")).toBe(true);
+  });
+
+  it("extracts Addressables.InstantiateAsync as uses_type with GameObject", async () => {
+    const code = `
+public class Spawner : MonoBehaviour {
+    async void Spawn() {
+        var handle = Addressables.InstantiateAsync(prefabRef);
+    }
+}
+`;
+    const result = await extractSymbolsAndRelations(code, "Spawner.cs");
+    const usesType = result.relations.filter(r => r.type === "uses_type");
+    expect(usesType.some(r => r.targetRef === "GameObject")).toBe(true);
+  });
+
+  it("extracts Resources.LoadAll<T> as uses_type", async () => {
+    const code = `
+public class Loader : MonoBehaviour {
+    void Start() {
+        var sprites = Resources.LoadAll<Sprite>("icons");
+    }
+}
+`;
+    const result = await extractSymbolsAndRelations(code, "Loader.cs");
+    const usesType = result.relations.filter(r => r.type === "uses_type");
+    expect(usesType.some(r => r.targetRef === "Sprite")).toBe(true);
+  });
+
   it("does NOT generate calls relations", async () => {
     const code = `
 using UnityEngine;
