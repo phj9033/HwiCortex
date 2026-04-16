@@ -103,8 +103,7 @@ vault/
 │   └── {project}/
 ├── wiki/                    # 위키 페이지
 │   └── {project}/
-│       ├── {title}.md       # frontmatter에 importance, hit_count 포함
-│       └── _clusters/       # 그래프 클러스터 (--obsidian)
+│       └── {title}.md       # frontmatter에 importance, hit_count 포함
 └── .obsidian/               # Obsidian 설정 (HwiCortex 수정 안 함)
 ```
 

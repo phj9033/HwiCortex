@@ -11,15 +11,12 @@ src/
 │   ├── extract.ts          # 지식 추출
 │   ├── watch.ts            # 세션 감시 데몬
 │   ├── rebuild.ts          # 볼트 기준 인덱스 재빌드
-│   ├── graph.ts            # 그래프 CLI
-│   ├── graph-obsidian.ts   # Obsidian 시각화 생성
 │   └── wiki.ts             # 위키 CLI
 ├── store.ts                # 데이터 액세스 + 검색 파이프라인
 ├── index.ts                # SDK 진입점
 ├── db.ts                   # SQLite 크로스 런타임 호환
 ├── llm.ts                  # LLM 추상화 (node-llama-cpp)
-├── ast.ts                  # tree-sitter AST 청킹/심볼 추출
-├── graph.ts                # 그래프 관계 해석/클러스터링
+├── ast.ts                  # tree-sitter AST 청킹
 ├── korean.ts               # mecab-ko 형태소 분석
 ├── wiki.ts                 # 위키 CRUD + importance 추적
 ├── wikilinks.ts            # [[wiki-link]] 파싱
@@ -126,34 +123,6 @@ HwiCortex는 3가지 검색 모드를 제공한다.
 
 AST 청킹 지원 언어: TypeScript, JavaScript, Python, Go, Rust, C#
 
-## 코드 그래프
-
-tree-sitter AST 기반으로 심볼과 관계를 추출한다. `hwicortex update` 시 자동 실행.
-
-### 관계 타입
-
-| 타입 | 의미 |
-|------|------|
-| `imports` | 파일 import/require |
-| `calls` | 함수/메서드 호출 |
-| `extends` | 클래스/트레잇 상속 |
-| `implements` | 인터페이스 구현 |
-| `uses_type` | 타입 참조 |
-| `wiki_link` | 마크다운 `[[링크]]` |
-
-### 심볼 종류
-
-`function`, `class`, `interface`, `type`, `enum`, `method`
-
-### 경로 해석
-
-import 경로를 실제 파일로 해석할 때 시도하는 확장자:
-`.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.go`, `.rs`, `.cs`, `/index.ts`, `/index.js`
-
-### 클러스터링
-
-해석된 관계 그래프에서 연결 컴포넌트(DFS/BFS)를 찾아 모듈 클러스터를 자동 감지한다. `code`와 `doc` 두 종류로 구분.
-
 ## 한국어 검색
 
 ### 문제
@@ -225,15 +194,6 @@ SQLite 단일 파일 (`~/.cache/qmd/index.sqlite`).
 | `store_collections` | 컬렉션 설정 |
 | `llm_cache` | LLM 호출 결과 캐시 |
 
-### 그래프 테이블
-
-| 테이블 | 역할 |
-|--------|------|
-| `symbols` | 코드 심볼 (이름, 종류, 라인) |
-| `relations` | 심볼/파일 관계 (source → target, 타입) |
-| `clusters` | 모듈 클러스터 (컬렉션, 이름, 종류) |
-| `cluster_members` | 클러스터 멤버십 (cluster_id → hash) |
-
 ## 사용 모델
 
 모든 모델은 node-llama-cpp로 로컬 실행. 최초 사용 시 HuggingFace에서 자동 다운로드.
@@ -245,6 +205,46 @@ SQLite 단일 파일 (`~/.cache/qmd/index.sqlite`).
 | 쿼리 확장 | qmd-query-expansion (Qwen3 파인튜닝) | 1.7B | Q4_K_M |
 
 모델 캐시: `~/.cache/qmd/models/`
+
+## 지식 루프
+
+AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전 관련 지식을 검색하여 참고하는 순환 루프. Claude Code 스킬로 동작하며 기존 CLI 명령을 조합한다.
+
+```
+작업 시작
+  │
+  ▼
+① knowledge-pre (자동)
+   hwicortex query -c wiki "<의도>" → 관련 위키 검색
+   관련도 높은 문서 최대 2건 로드
+  │
+  ▼
+② 작업 수행
+  │
+  ▼
+③ knowledge-post (자동)
+   대화 분석 → 인사이트 추출
+   hwicortex search -c wiki → 중복 체크
+   wiki create / wiki update → 저장
+   hwicortex update --embed → 인덱스 갱신
+  │
+  ▼
+④ 다음 작업에서 ①로 순환
+```
+
+### 배치 처리
+
+| 스킬 | 트리거 | 설명 |
+|------|--------|------|
+| `/knowledge-pre` | 자동/수동 | 작업 전 위키 검색 |
+| `/knowledge-post` | 자동/수동 | 작업 후 인사이트 저장 |
+| `/knowledge-ingest` | 수동 | 미처리 AI 세션 배치 추출 (사용자 문답) |
+| `/knowledge-tidy` | 수동 | 중복 병합, 링크 보강, 태그 통일, 저importance 정리 |
+
+### CLI 지원
+
+- `wiki list --json`: 위키 메타데이터를 JSON으로 출력 (knowledge-tidy가 사용)
+- `update --embed`: 인덱스 업데이트 후 임베딩을 한 번에 실행 (knowledge-post가 사용)
 
 ## 설계 원칙
 

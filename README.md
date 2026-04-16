@@ -70,19 +70,6 @@ hwicortex context list
 hwicortex context check    # 컨텍스트 누락 확인
 ```
 
-## 코드 그래프
-
-tree-sitter AST 기반 코드 관계 분석. `hwicortex update` 시 자동 추출된다.
-
-```sh
-hwicortex graph src/store.ts            # 파일 관계 (imports, calls, cluster)
-hwicortex path src/store.ts src/db.ts   # 두 파일 간 연결 경로
-hwicortex related src/store.ts          # 관련 파일
-hwicortex symbol createStore            # 심볼 정의/사용처
-hwicortex graph clusters                # 자동 감지 모듈 클러스터
-hwicortex graph --obsidian              # Obsidian 시각화 페이지 생성
-```
-
 ## 위키
 
 Obsidian 호환 마크다운으로 지식을 저장하고 관리한다.
@@ -110,6 +97,23 @@ hwicortex extract --dry-run    # 예상 토큰/세션 수 확인
 hwicortex extract              # 미처리 세션 일괄 추출
 hwicortex watch                # 세션 종료 시 자동 추출
 ```
+
+## 지식 루프 (Claude Code 스킬)
+
+AI 대화에서 지식을 자동 추출하여 위키에 축적하고, 작업 전 관련 지식을 검색하여 참고하는 순환 루프. Claude Code 환경에서 스킬로 동작한다.
+
+```sh
+# 초기 설정: wiki vault를 컬렉션으로 등록
+hwicortex collection add <vault>/wiki --name wiki --mask "**/*.md"
+hwicortex update --embed
+```
+
+| 스킬 | 설명 |
+|------|------|
+| `/knowledge-pre` | 작업 시작 전 관련 위키 지식 검색 |
+| `/knowledge-post` | 작업 완료 후 인사이트 자동 추출·저장 |
+| `/knowledge-ingest` | 미처리 AI 세션 배치 처리 (사용자 문답) |
+| `/knowledge-tidy` | 위키 정리 — 중복 병합, 링크 보강, 태그 통일 |
 
 ## SDK
 

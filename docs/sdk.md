@@ -148,7 +148,6 @@ console.log(`stale embeddings: ${health.staleEmbeddings}`);
 import {
   extractSnippet,
   addLineNumbers,
-  extractSymbolsAndRelations,
   getASTStatus,
   getDefaultDbPath,
 } from "hwicortex";
@@ -159,8 +158,8 @@ const snippet = extractSnippet(body, queryTerms);
 // 줄번호 추가
 const numbered = addLineNumbers(text, startLine);
 
-// AST 심볼/관계 추출
-const analysis = await extractSymbolsAndRelations(code, "typescript");
+// AST 청킹 상태 확인
+const astStatus = getASTStatus();
 ```
 
 ## 내보내는 타입
@@ -181,7 +180,6 @@ type IndexStatus, IndexHealthInfo, SearchHooks
 type ReindexProgress, ReindexResult, EmbedProgress, EmbedResult
 
 // AST
-type AstSymbol, AstRelation, AstAnalysis
 type ChunkStrategy  // "auto" | "regex"
 ```
 

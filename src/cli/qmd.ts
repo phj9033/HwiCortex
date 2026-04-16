@@ -110,8 +110,6 @@ import { handleWatch } from "./watch.js";
 import { handleRebuild } from "./rebuild.js";
 import { handleWiki } from "./wiki.js";
 import { bumpCount } from "../wiki.js";
-import { handleGraph, handlePath, handleRelated, handleSymbol, handleClusters } from "./graph.js";
-import { enrichSearchResults } from "../graph.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -1807,7 +1805,6 @@ type OutputOptions = {
   sourceType?: string;   // Filter by source_type: docs|sessions|knowledge
   searchMode?: string;   // bm25|hybrid (default hybrid)
   noCount?: boolean;     // Skip wiki hit count tracking
-  noGraph?: boolean;     // Skip graph enrichment (cluster, importedByCount)
 };
 
 // Highlight query terms in text (skip short words < 3 chars)
@@ -1943,25 +1940,12 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
     return;
   }
 
-  // Enrich with graph context unless --no-graph
-  let enrichedResults = filtered;
-  if (!opts.noGraph) {
-    try {
-      const graphDb = getDb();
-      if (graphDb) {
-        enrichedResults = enrichSearchResults(graphDb, filtered) as any;
-      }
-    } catch {
-      // Graph data not available, skip enrichment
-    }
-  }
-
   // Helper to create qmd:// URI from displayPath
   const toQmdPath = (displayPath: string) => `qmd://${displayPath}`;
 
   if (opts.format === "json") {
     // JSON output for LLM consumption
-    const output = enrichedResults.map(row => {
+    const output = filtered.map(row => {
       const enriched = row as any;
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : undefined);
       let body = opts.full ? row.body : undefined;
@@ -1986,7 +1970,7 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
     console.log(JSON.stringify(output, null, 2));
   } else if (opts.format === "files") {
     // Simple docid,score,filepath,context output
-    for (const row of enrichedResults) {
+    for (const row of filtered) {
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : "");
       const ctx = row.context ? `,"${row.context.replace(/"/g, '""')}"` : "";
       console.log(`#${docid},${row.score.toFixed(2)},${toQmdPath(row.displayPath)}${ctx}`);
@@ -1995,8 +1979,8 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
     const editorUriTemplate = getEditorUriTemplate();
     const linkDb = getDb();
 
-    for (let i = 0; i < enrichedResults.length; i++) {
-      const row = enrichedResults[i];
+    for (let i = 0; i < filtered.length; i++) {
+      const row = filtered[i];
       if (!row) continue;
       const enriched = row as any;
       const { line, snippet } = extractSnippet(row.body, query, 500, row.chunkPos, undefined, opts.intent);
@@ -2077,11 +2061,11 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
       console.log(highlighted);
 
       // Double empty line between results
-      if (i < enrichedResults.length - 1) console.log('\n');
+      if (i < filtered.length - 1) console.log('\n');
     }
   } else if (opts.format === "md") {
-    for (let i = 0; i < enrichedResults.length; i++) {
-      const row = enrichedResults[i];
+    for (let i = 0; i < filtered.length; i++) {
+      const row = filtered[i];
       if (!row) continue;
       const heading = row.title || row.displayPath;
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : undefined);
@@ -2094,7 +2078,7 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
       console.log(`---\n# ${heading}\n${docidLine}${contextLine}\n${content}\n`);
     }
   } else if (opts.format === "xml") {
-    for (const row of enrichedResults) {
+    for (const row of filtered) {
       const titleAttr = row.title ? ` title="${row.title.replace(/"/g, '&quot;')}"` : "";
       const contextAttr = row.context ? ` context="${row.context.replace(/"/g, '&quot;')}"` : "";
       const docid = row.docid || (row.hash ? row.hash.slice(0, 6) : "");
@@ -2107,7 +2091,7 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
   } else {
     // CSV format
     console.log("docid,score,file,title,context,line,snippet");
-    for (const row of enrichedResults) {
+    for (const row of filtered) {
       const { line, snippet } = extractSnippet(row.body, query, 500, row.chunkPos, undefined, opts.intent);
       let content = opts.full ? row.body : snippet;
       if (opts.lineNumbers) {
@@ -2575,10 +2559,6 @@ function parseCLI() {
       intent: { type: "string" },
       // Chunking options
       "chunk-strategy": { type: "string" },  // "regex" (default) or "auto" (AST for code files)
-      // Graph options
-      "no-graph": { type: "boolean", default: false },
-      obsidian: { type: "boolean" },
-      kind: { type: "string" },
       // HwiCortex options
       source: { type: "string" },        // --source docs|sessions|knowledge
       mode: { type: "string" },          // --mode bm25|hybrid
@@ -2635,7 +2615,6 @@ function parseCLI() {
     sourceType: values.source as string | undefined,
     searchMode: values.mode as string | undefined,
     noCount: !!values["no-count"],
-    noGraph: !!values["no-graph"],
   };
 
   return {
@@ -3393,63 +3372,6 @@ if (isMain) {
       let wikiStore: ReturnType<typeof createStore> | undefined;
       try { wikiStore = getStore(); } catch { /* store unavailable, proceed without FTS */ }
       await handleWiki(cli.args, cli.values, wikiStore);
-      break;
-    }
-
-    case "graph": {
-      const store = getStore();
-      const subcmd = cli.args[0];
-      const opts = {
-        collection: cli.values.collection as string | undefined,
-        kind: cli.values.kind as string | undefined
-      };
-      if (subcmd === "clusters") {
-        console.log(handleClusters(store.db, opts));
-      } else if (cli.values.obsidian) {
-        const { writeObsidianGraph } = await import("./graph-obsidian.js");
-        const collectionValue = cli.values.collection;
-        const collectionStr = Array.isArray(collectionValue) ? collectionValue[0] : collectionValue;
-        const project = (typeof collectionStr === "string" ? collectionStr : undefined) || "default";
-        await writeObsidianGraph(store.db, "vault", project);
-      } else if (subcmd) {
-        console.log(handleGraph(store.db, subcmd, opts));
-      } else {
-        console.error("Usage: hwicortex graph <file> | clusters [--collection] | --obsidian");
-        process.exit(1);
-      }
-      break;
-    }
-
-    case "path": {
-      if (cli.args.length < 2) {
-        console.error("Usage: hwicortex path <fileA> <fileB>");
-        process.exit(1);
-      }
-      const store = getStore();
-      const opts = { collection: cli.values.collection as string | undefined };
-      console.log(handlePath(store.db, cli.args[0]!, cli.args[1]!, opts));
-      break;
-    }
-
-    case "related": {
-      if (!cli.args[0]) {
-        console.error("Usage: hwicortex related <file>");
-        process.exit(1);
-      }
-      const store = getStore();
-      const opts = { collection: cli.values.collection as string | undefined };
-      console.log(handleRelated(store.db, cli.args[0], opts));
-      break;
-    }
-
-    case "symbol": {
-      if (!cli.args[0]) {
-        console.error("Usage: hwicortex symbol <name>");
-        process.exit(1);
-      }
-      const store = getStore();
-      const opts = { collection: cli.values.collection as string | undefined };
-      console.log(handleSymbol(store.db, cli.args[0], opts));
       break;
     }
 

@@ -40,11 +40,6 @@ status | update [--pull] [--embed] | embed | pull | cleanup
 # 컨텍스트
 context add [path] "text" | context list | context check | context rm <path>
 
-# 코드 그래프
-graph <file> | path <A> <B> | related <file> | symbol <name>
-graph clusters [--collection <n>] [--kind code|doc]
-graph --obsidian
-
 # 위키
 wiki create "제목" --project <n> [--tags t1,t2] [--body "..."] [--stdin] [--auto-merge] [--force]
 wiki update | show | rm | list | link | unlink | links | index | reset-importance
@@ -63,7 +58,6 @@ rebuild
 -n <num>                  # 결과 수
 --full                    # 전체 내용
 --json | --csv | --md | --xml | --files
---no-graph                # 그래프 컨텍스트 제외
 --line-numbers            # 줄번호
 --intent <text>           # 검색 의도 힌트
 ```
@@ -74,7 +68,6 @@ rebuild
 - **LLM**: node-llama-cpp 로컬 추론 (임베딩, 리랭킹, 쿼리확장)
 - **청킹**: 900토큰/15% 오버랩, 마크다운 헤딩 경계 우선. `--chunk-strategy auto`로 tree-sitter AST 청킹
 - **한국어**: mecab-ko 형태소 분석 (설치 시 자동 활성화)
-- **그래프**: tree-sitter AST 기반 심볼/관계 추출 → label propagation 클러스터링
 - **위키**: Obsidian 호환 마크다운, importance/hit_count 자동 추적
 - **지식 추출**: AI 세션 파싱 → LLM 기반 인사이트 추출 → 볼트 저장
 

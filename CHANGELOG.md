@@ -4,31 +4,13 @@
 
 ### Added
 
-- C# (.cs) language support for graph extraction (symbols, relations: using, extends, implements, attributes)
-- Markdown wiki-link (`[[...]]`) graph extraction for document clustering
-- `--kind code|doc` filter for `graph clusters` command
-- Kind-separated cluster output (Code Clusters / Doc Clusters)
-- Wiki-link display in `graph` and `related` commands
-- Obsidian cluster pages split by kind (`_clusters/code/`, `_clusters/doc/`)
-- Wiki-link sections in Obsidian relation pages
+- `wiki list --json` outputs full WikiMeta fields as JSON array (filePath excluded)
+- `update --embed` flag runs embedding automatically after index update
+- Knowledge loop skills: `/knowledge-pre` (작업 전 지식 검색), `/knowledge-post` (작업 후 지식 저장), `/knowledge-ingest` (세션 배치 처리), `/knowledge-tidy` (지식 정리)
 
 ### Changes
 
-- **Graph integration**: AST-based symbol and relation extraction via
-  tree-sitter. `hwicortex update` now automatically extracts symbols
-  (functions, classes, interfaces, types) and relations (imports, calls,
-  extends, implements, uses_type) from code files. No LLM calls required.
-- **Graph CLI commands**: `hwicortex graph <file>` shows file relationships,
-  `hwicortex path <fileA> <fileB>` finds connection paths,
-  `hwicortex related <file>` shows direct and cluster relations,
-  `hwicortex symbol <name>` finds symbol definitions and usages,
-  `hwicortex graph clusters` lists auto-detected module clusters.
-- **Graph-enriched search**: search results now include cluster membership
-  and relation context when available. Disable with `--no-graph`.
-- **Label propagation clustering**: pure JS implementation groups related
-  files into modules based on import/call relationships.
-- **Obsidian graph visualization**: `hwicortex graph --obsidian` generates
-  cluster index and file relation pages in `vault/wiki/{project}/`.
+- **Knowledge loop**: 4개의 스킬이 기존 hwicortex CLI를 조합하여 AI 대화에서 지식을 자동 추출·축적·검색하는 순환 루프를 구성한다.
 - **Wiki hit counting**: wiki pages referenced in search/query results
   automatically increment their `hit_count` for importance tracking.
 - Korean morphological analysis for BM25 search via mecab-ko. Korean text is

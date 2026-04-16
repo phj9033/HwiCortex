@@ -35,8 +35,7 @@ import type {
   CollectionConfig,
   ContextMap,
 } from "./collections.js";
-import { detectLanguage, extractSymbolsAndRelations } from "./ast.js";
-import { saveSymbols, saveRelations, resolveTargetHashes, detectClusters, nameClusters, saveClusters } from "./graph.js";
+import { detectLanguage } from "./ast.js";
 
 // =============================================================================
 // Configuration
@@ -1260,32 +1259,6 @@ export async function reindexCollection(
       if (docId) await upsertFTS(db, docId, collectionName + "/" + path, title, content);
     }
 
-    // Graph extraction: extract symbols and relations from AST-supported files
-    if (detectLanguage(relativeFile) !== null) {
-      const existingSymbols = db.prepare("SELECT 1 FROM symbols WHERE hash = ? LIMIT 1").get(hash);
-      if (!existingSymbols) {
-        const analysis = await extractSymbolsAndRelations(content, relativeFile);
-        if (analysis.symbols.length > 0 || analysis.relations.length > 0) {
-          saveSymbols(db, hash, analysis.symbols);
-          saveRelations(db, hash, analysis.relations);
-        }
-      }
-    }
-
-    // Wiki-link extraction for markdown files
-    if (relativeFile.endsWith(".md")) {
-      const existingWikiRels = db.prepare(
-        "SELECT 1 FROM relations WHERE source_hash = ? AND type = 'wiki_link' LIMIT 1"
-      ).get(hash);
-      if (!existingWikiRels) {
-        const { extractWikiLinks } = await import("./wikilinks.js");
-        const wikiRelations = extractWikiLinks(content);
-        if (wikiRelations.length > 0) {
-          saveRelations(db, hash, wikiRelations);
-        }
-      }
-    }
-
     processed++;
     options?.onProgress?.({ file: relativeFile, current: processed, total });
   }
@@ -1298,32 +1271,6 @@ export async function reindexCollection(
       deactivateDocument(db, collectionName, path);
       removed++;
     }
-  }
-
-  // Cleanup orphaned graph data for deactivated documents
-  const deactivatedHashes = db.prepare(`
-    SELECT DISTINCT hash FROM documents
-    WHERE collection = ? AND active = 0
-    AND hash NOT IN (SELECT hash FROM documents WHERE active = 1)
-  `).all(collectionName) as { hash: string }[];
-
-  for (const { hash } of deactivatedHashes) {
-    db.prepare("DELETE FROM symbols WHERE hash = ?").run(hash);
-    db.prepare("DELETE FROM relations WHERE source_hash = ?").run(hash);
-  }
-
-  // Resolve target hashes and run clustering
-  resolveTargetHashes(db, collectionName);
-
-  const CODE_RELATION_TYPES = ["imports", "calls", "extends", "implements", "uses_type"];
-  const codeClusters = detectClusters(db, collectionName, { relationTypes: CODE_RELATION_TYPES });
-  if (codeClusters.length > 0) {
-    saveClusters(db, collectionName, nameClusters(db, codeClusters), "code");
-  }
-
-  const docClusters = detectClusters(db, collectionName, { relationTypes: ["wiki_link"] });
-  if (docClusters.length > 0) {
-    saveClusters(db, collectionName, nameClusters(db, docClusters), "doc");
   }
 
   const orphanedCleaned = cleanupOrphanedContent(db);
@@ -2013,9 +1960,6 @@ export function deleteInactiveDocuments(db: Database): number {
  */
 export function cleanupOrphanedContent(db: Database): number {
   const orphanHashSubquery = `SELECT hash FROM content WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)`;
-  db.exec(`DELETE FROM cluster_members WHERE hash IN (${orphanHashSubquery})`);
-  db.exec(`DELETE FROM relations WHERE source_hash IN (${orphanHashSubquery})`);
-  db.exec(`DELETE FROM symbols WHERE hash IN (${orphanHashSubquery})`);
   db.exec(`DELETE FROM content_vectors WHERE hash IN (${orphanHashSubquery})`);
 
   const result = db.prepare(`
@@ -2701,11 +2645,8 @@ export function removeCollection(db: Database, collectionName: string): { delete
   // Delete documents from database
   const docResult = db.prepare(`DELETE FROM documents WHERE collection = ?`).run(collectionName);
 
-  // Clean up graph tables referencing orphaned content hashes
+  // Clean up orphaned content vectors
   const orphanHashSubquery = `SELECT hash FROM content WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)`;
-  db.exec(`DELETE FROM cluster_members WHERE hash IN (${orphanHashSubquery})`);
-  db.exec(`DELETE FROM relations WHERE source_hash IN (${orphanHashSubquery})`);
-  db.exec(`DELETE FROM symbols WHERE hash IN (${orphanHashSubquery})`);
   db.exec(`DELETE FROM content_vectors WHERE hash IN (${orphanHashSubquery})`);
 
   // Clean up orphaned content hashes (now safe after removing FK dependents)
