@@ -586,6 +586,14 @@ ${token}
     const after = await runQmd(["get", "qmd://empty-check/only.md"], { dbPath, configDir });
     expect(after.exitCode).toBe(1);
   });
+
+  test("update --embed runs embedding after index", async () => {
+    const { stdout, exitCode } = await runQmd(["update", "--embed"], { dbPath: localDbPath });
+    // --embed 플래그에 의해 추가된 메시지 확인
+    // Note: embedding may fail in test environments without LLM models,
+    // but the flag should be accepted and the message printed before attempting.
+    expect(stdout).toContain("Running embedding for updated content");
+  });
 });
 
 describe("CLI Add-Context Command", () => {

@@ -2562,6 +2562,7 @@ function parseCLI() {
       "max-batch-mb": { type: "string" },
       // Update options
       pull: { type: "boolean" },  // git pull before update
+      embed: { type: "boolean" },  // run embedding after update
       refresh: { type: "boolean" },
       // Get options
       l: { type: "string" },  // max lines
@@ -3182,6 +3183,14 @@ if (isMain) {
 
     case "update":
       await updateCollections();
+      if (cli.values.embed) {
+        console.log(`\n${c.dim}Running embedding for updated content...${c.reset}`);
+        try {
+          await vectorIndex(DEFAULT_EMBED_MODEL_URI, false);
+        } catch (error) {
+          console.error(`Embedding failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
       break;
 
     case "embed":
