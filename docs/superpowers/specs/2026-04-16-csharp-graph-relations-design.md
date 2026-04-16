@@ -22,14 +22,27 @@ Each node is a C# script identified by its class name (file name). No method-lev
 
 **Delete:**
 - `ast.ts`: `SYMBOL_QUERIES.csharp` entry
-- `ast.ts`: `else if (language === "csharp")` relation extraction block (lines 736-805)
-- C# test cases in `ast-relations.test.ts`, `ast.test.ts`, `graph.test.ts`, `graph-integration.test.ts`
+- `ast.ts`: `else if (language === "csharp")` relation extraction block
+- C# test cases in `ast-relations.test.ts`, `ast.test.ts`, `graph-integration.test.ts`
+- **Keep**: `LANGUAGE_QUERIES.csharp` (chunking용, 그래프와 무관), `graph.test.ts`의 symbol-name fallback resolution 테스트 (resolution 로직 검증용)
 
 **Create:**
 - `src/ast-csharp.ts` — C# symbol + relation extraction
 
 **Modify:**
 - `ast.ts` — delegate to `ast-csharp.ts` when `language === "csharp"`
+
+### Module API
+
+`ast-csharp.ts` exports:
+```typescript
+export function extractCSharpSymbolsAndRelations(
+  rootNode: SyntaxNode,
+  filepath: string
+): { symbols: AstSymbol[]; relations: AstRelation[] };
+```
+
+`ast.ts`의 `extractSymbolsAndRelations`에서 `language === "csharp"`일 때 이 함수로 위임. tree-sitter 파서 초기화/삭제는 `ast.ts`가 담당.
 
 **Unchanged:**
 - DB schema, `graph.ts` (`FileGraphInfo`), CLI, resolution logic
@@ -43,7 +56,7 @@ Each node is a C# script identified by its class name (file name). No method-lev
 | `enum` | `enum_declaration` | `WeaponType` |
 | `type` | `struct_declaration` | `Vector3Int` |
 
-Method symbols are excluded — node granularity is script (class) level.
+Method symbols are excluded — node granularity is script (class) level. This is an intentional behavioral change: previously indexed C# method symbols will disappear from the `symbols` table after reindex.
 
 ### Relation Extraction
 
@@ -56,7 +69,15 @@ Method symbols are excluded — node granularity is script (class) level.
 
 Detection: I-prefix + uppercase second char = `implements`, otherwise `extends`. Generic params stripped (`Base<T>` -> `Base`), namespace prefixes stripped.
 
-#### Asset References (`uses_type`)
+#### Component Dependencies (`uses_type` via attribute)
+
+| pattern | example |
+|---------|---------|
+| `[RequireComponent(typeof(T))]` | `[RequireComponent(typeof(Rigidbody))]` |
+
+Extract from `attribute` nodes where name is `RequireComponent`, then find `typeof_expression` children.
+
+#### Asset References (`uses_type` via invocation)
 
 Extract generic type parameter from `invocation_expression`:
 
@@ -65,16 +86,16 @@ Extract generic type parameter from `invocation_expression`:
 | `Resources.Load<T>()` | `Resources.Load<AudioClip>("sfx")` |
 | `Resources.LoadAll<T>()` | `Resources.LoadAll<Sprite>("icons")` |
 | `Addressables.LoadAssetAsync<T>()` | `Addressables.LoadAssetAsync<GameObject>(key)` |
-| `Addressables.InstantiateAsync()` | No generic — fixed `targetRef: "GameObject"` |
+| `Addressables.InstantiateAsync()` | No generic — separate string match, fixed `targetRef: "GameObject"` |
 | `AssetBundle.LoadAsset<T>()` | `bundle.LoadAsset<Texture2D>("tex")` |
 | `AssetBundle.LoadAllAssets<T>()` | `bundle.LoadAllAssets<Material>()` |
 
-Regex:
+Generic invocations detected via regex:
 ```
 /(?:Resources\.Load(?:All)?|Addressables\.LoadAssetAsync|(?:\w+\.)?LoadAsset|(?:\w+\.)?LoadAllAssets)<(\w+)>/
 ```
 
-`Addressables.InstantiateAsync` has no generic parameter — maps to `targetRef: "GameObject"`.
+`Addressables.InstantiateAsync` has no generic parameter — detected by separate string match (`funcText.includes("InstantiateAsync")`), maps to `targetRef: "GameObject"`.
 
 **Not generated:** `imports` (from using directives), `calls`.
 
@@ -98,3 +119,4 @@ No changes to `resolveTargetHashes`. C# relations use the existing symbol-name f
 | AssetBundle | `bundle.LoadAsset<Texture2D>()` -> uses_type |
 | InstantiateAsync | no generic -> targetRef `GameObject` |
 | no using imports | using directive present but no imports relation generated |
+| RequireComponent | `[RequireComponent(typeof(Rigidbody))]` -> uses_type |
