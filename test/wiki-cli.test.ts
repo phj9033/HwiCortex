@@ -63,6 +63,7 @@ describe("qmd wiki CLI", () => {
     expect(pages[0]).toHaveProperty("project", "test");
     expect(pages[0]).toHaveProperty("tags");
     expect(pages[0]).toHaveProperty("importance");
+    expect(pages[0]).not.toHaveProperty("filePath");
   });
 
   test("rm deletes page", () => {
