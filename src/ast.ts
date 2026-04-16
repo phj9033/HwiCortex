@@ -21,6 +21,7 @@
 import { createRequire } from "node:module";
 import { extname } from "node:path";
 import type { BreakPoint } from "./store.js";
+import { extractCSharpSymbolsAndRelations, CSHARP_SYMBOL_QUERY } from "./ast-csharp.js";
 
 // web-tree-sitter types — imported dynamically to avoid top-level WASM init
 type ParserType = import("web-tree-sitter").Parser;
@@ -462,13 +463,7 @@ const SYMBOL_QUERIES: Record<SupportedLanguage, string> = {
     (enum_item name: (type_identifier) @enum_name)
     (trait_item name: (type_identifier) @interface_name)
   `,
-  csharp: `
-    (class_declaration name: (identifier) @class_name)
-    (method_declaration name: (identifier) @method_name)
-    (interface_declaration name: (identifier) @interface_name)
-    (enum_declaration name: (identifier) @enum_name)
-    (struct_declaration name: (identifier) @type_name)
-  `,
+  csharp: CSHARP_SYMBOL_QUERY,
 };
 
 /**
@@ -514,6 +509,13 @@ export async function extractSymbolsAndRelations(
     if (!tree) {
       parser.delete();
       return { symbols: [], relations: [] };
+    }
+
+    if (language === "csharp") {
+      const result = extractCSharpSymbolsAndRelations(tree.rootNode, filepath);
+      tree.delete();
+      parser.delete();
+      return result;
     }
 
     const querySource = SYMBOL_QUERIES[language];
@@ -731,76 +733,6 @@ export async function extractSymbolsAndRelations(
             importedSymbols.add(lastPart);
             relations.push({ type: "imports", targetRef: text, targetSymbol: lastPart });
           }
-        }
-      }
-    } else if (language === "csharp") {
-      const importedNamespaces = new Set<string>();
-
-      // Extract using directives
-      for (const usingNode of rootNode.descendantsOfType("using_directive")) {
-        const nameNode = usingNode.namedChildren.find(
-          n => n.type === "qualified_name" || n.type === "identifier_name" || n.type === "identifier"
-        );
-        if (nameNode) {
-          const targetRef = nameNode.text;
-          importedNamespaces.add(targetRef);
-          relations.push({ type: "imports", targetRef });
-        }
-      }
-
-      // Extract class/struct inheritance and interface implementation
-      for (const classNode of [
-        ...rootNode.descendantsOfType("class_declaration"),
-        ...rootNode.descendantsOfType("struct_declaration"),
-      ]) {
-        const nameNode = classNode.childForFieldName("name");
-        const className = nameNode?.text;
-        if (!className) continue;
-
-        const baseList = classNode.childForFieldName("bases") ?? classNode.descendantsOfType("base_list")[0];
-        if (!baseList) continue;
-
-        for (const base of baseList.namedChildren) {
-          let typeName = base.text;
-          // Strip generic params: Foo<T> → Foo
-          const genericIdx = typeName.indexOf("<");
-          if (genericIdx > 0) typeName = typeName.substring(0, genericIdx);
-          // Strip namespace prefix
-          const dotIdx = typeName.lastIndexOf(".");
-          if (dotIdx >= 0) typeName = typeName.substring(dotIdx + 1);
-
-          // I-prefix convention for interfaces
-          const relType = typeName.startsWith("I") && typeName.length > 1 && typeName[1]?.toUpperCase() === typeName[1]
-            ? "implements" : "extends";
-          relations.push({ type: relType, sourceSymbol: className, targetRef: typeName });
-        }
-      }
-
-      // Extract [RequireComponent(typeof(T))] attributes
-      for (const attrNode of rootNode.descendantsOfType("attribute")) {
-        const nameNode = attrNode.childForFieldName("name");
-        if (nameNode?.text === "RequireComponent") {
-          const argList = attrNode.descendantsOfType("attribute_argument_list")[0]
-            ?? attrNode.descendantsOfType("argument_list")[0];
-          if (argList) {
-            for (const typeofExpr of argList.descendantsOfType("typeof_expression")) {
-              const typeNode = typeofExpr.namedChildren[0];
-              if (typeNode) {
-                relations.push({ type: "uses_type", targetRef: typeNode.text });
-              }
-            }
-          }
-        }
-      }
-
-      // Extract Resources.Load<T>() and Addressables.LoadAssetAsync<T>()
-      for (const invocation of rootNode.descendantsOfType("invocation_expression")) {
-        const funcNode = invocation.childForFieldName("function");
-        if (!funcNode) continue;
-        const funcText = funcNode.text;
-        const genericMatch = funcText.match(/(?:Resources\.Load|Addressables\.LoadAssetAsync)<(\w+)>/);
-        if (genericMatch?.[1]) {
-          relations.push({ type: "uses_type", targetRef: genericMatch[1] });
         }
       }
     }
