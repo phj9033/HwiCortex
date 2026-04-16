@@ -52,6 +52,19 @@ describe("qmd wiki CLI", () => {
     expect(out).toContain("second");
   });
 
+  test("list --json outputs JSON array with metadata", () => {
+    qmd('wiki create "Test Page" --project test --tags t1,t2 --body "content"', vaultDir);
+    qmd('wiki create "Another Page" --project test --tags t2,t3 --body "more"', vaultDir);
+    const out = qmd("wiki list --project test --json", vaultDir);
+    const pages = JSON.parse(out);
+    expect(Array.isArray(pages)).toBe(true);
+    expect(pages).toHaveLength(2);
+    expect(pages[0]).toHaveProperty("title");
+    expect(pages[0]).toHaveProperty("project", "test");
+    expect(pages[0]).toHaveProperty("tags");
+    expect(pages[0]).toHaveProperty("importance");
+  });
+
   test("rm deletes page", () => {
     qmd('wiki create "Del" --project p', vaultDir);
     qmd('wiki rm "Del" --project p', vaultDir);

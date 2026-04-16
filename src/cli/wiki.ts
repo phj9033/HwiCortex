@@ -152,7 +152,10 @@ export async function handleWiki(args: string[], flags: Record<string, any>, sto
           project: flags.project as string | undefined,
           tag: flags.tag as string | undefined,
         });
-        if (pages.length === 0) {
+        if (flags.json) {
+          const jsonPages = pages.map(({ filePath, ...rest }) => rest);
+          console.log(JSON.stringify(jsonPages, null, 2));
+        } else if (pages.length === 0) {
           console.log("No wiki pages found.");
         } else {
           for (const p of pages) {
