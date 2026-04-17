@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { sessionToMarkdown } from "../../src/ingest/session-to-markdown";
 import type { ParsedSession } from "../../src/ingest/session-parser/types";
 

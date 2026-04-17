@@ -261,7 +261,7 @@ describe("CLI Skill Commands", () => {
     expect(exitCode).toBe(0);
     expect(stdout).toContain("QMD Skill (embedded)");
     expect(stdout).toContain("name: qmd");
-    expect(stdout).toContain("allowed-tools: Bash(qmd:*), mcp__qmd__*");
+    expect(stdout).toContain("allowed-tools: Bash(qmd:*)");
   });
 
   test("shows skill help with -h", async () => {

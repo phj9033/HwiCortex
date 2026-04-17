@@ -22,6 +22,8 @@ import {
   insertContent,
   hashContent,
   searchFTS,
+  upsertFTS,
+  getDocumentId,
 } from "../../src/store.js";
 import { StateManager } from "../../src/state/state-manager.js";
 import {
@@ -144,9 +146,11 @@ The token is passed in the Authorization header for subsequent requests.
     insertDocument(db, "e2e-test", destPath, title, hash, now, now, {
       source_type: "docs",
     });
+    const docId = getDocumentId(db, "e2e-test", destPath);
+    await upsertFTS(db, docId!, destPath, title, mdContent);
 
     // 3. Search for it using FTS
-    const results = searchFTS(db, "authentication JWT tokens", 10, undefined, "docs");
+    const results = await searchFTS(db, "authentication JWT tokens", 10, undefined, "docs");
     expect(results.length).toBeGreaterThan(0);
 
     // The result should reference our ingested document
@@ -170,6 +174,8 @@ The token is passed in the Authorization header for subsequent requests.
     insertDocument(db, "e2e-test", "/tmp/deploy.md", "deploy", docsHash, now, now, {
       source_type: "docs",
     });
+    const docsDocId = getDocumentId(db, "e2e-test", "/tmp/deploy.md");
+    await upsertFTS(db, docsDocId!, "/tmp/deploy.md", "deploy", docsContent);
 
     // Ingest a "knowledge" file
     const knowledgeContent = "Knowledge about Docker container orchestration patterns.";
@@ -178,14 +184,16 @@ The token is passed in the Authorization header for subsequent requests.
     insertDocument(db, "e2e-test", "/tmp/k-docker.md", "docker-knowledge", knowledgeHash, now, now, {
       source_type: "knowledge",
     });
+    const knowledgeDocId = getDocumentId(db, "e2e-test", "/tmp/k-docker.md");
+    await upsertFTS(db, knowledgeDocId!, "/tmp/k-docker.md", "docker-knowledge", knowledgeContent);
 
     // Search with source_type "docs" should only find the docs entry
-    const docsResults = searchFTS(db, "Docker", 10, undefined, "docs");
+    const docsResults = await searchFTS(db, "Docker", 10, undefined, "docs");
     expect(docsResults.length).toBe(1);
     expect(docsResults[0].title).toBe("deploy");
 
     // Search with source_type "knowledge" should only find the knowledge entry
-    const knowledgeResults = searchFTS(db, "Docker", 10, undefined, "knowledge");
+    const knowledgeResults = await searchFTS(db, "Docker", 10, undefined, "knowledge");
     expect(knowledgeResults.length).toBe(1);
     expect(knowledgeResults[0].title).toBe("docker-knowledge");
 
@@ -245,7 +253,7 @@ describe("E2E: extract → search knowledge flow", () => {
     expect(existsSync(knowledgeVaultDir)).toBe(true);
 
     // 5. Search with sourceType "sessions" should find indexed session
-    const sessionResults = searchFTS(
+    const sessionResults = await searchFTS(
       store.db,
       "project structure",
       10,
@@ -255,7 +263,7 @@ describe("E2E: extract → search knowledge flow", () => {
     expect(sessionResults.length).toBeGreaterThan(0);
 
     // 6. Search with sourceType "knowledge" should find extracted knowledge
-    const knowledgeResults = searchFTS(
+    const knowledgeResults = await searchFTS(
       store.db,
       "test summary",
       10,
@@ -341,12 +349,15 @@ Use kubectl apply to deploy manifests.
     const now = new Date().toISOString();
     const hash = await hashContent(docContent);
     insertContent(db1, hash, docContent, now);
-    insertDocument(db1, "hwicortex", join(docsDir, "k8s-deploy.md"), "k8s-deploy", hash, now, now, {
+    const k8sPath = join(docsDir, "k8s-deploy.md");
+    insertDocument(db1, "hwicortex", k8sPath, "k8s-deploy", hash, now, now, {
       source_type: "docs",
     });
+    const k8sDocId = getDocumentId(db1, "hwicortex", k8sPath);
+    await upsertFTS(db1, k8sDocId!, k8sPath, "k8s-deploy", docContent);
 
     // Verify search works before
-    const beforeResults = searchFTS(db1, "Kubernetes deploy", 10, undefined, "docs");
+    const beforeResults = await searchFTS(db1, "Kubernetes deploy", 10, undefined, "docs");
     expect(beforeResults.length).toBeGreaterThan(0);
     store1.close();
 
@@ -370,10 +381,12 @@ Use kubectl apply to deploy manifests.
       insertDocument(db2, "hwicortex", filePath, title, fileHash, rebuildNow, rebuildNow, {
         source_type: "docs",
       });
+      const rebuildDocId = getDocumentId(db2, "hwicortex", filePath);
+      await upsertFTS(db2, rebuildDocId!, filePath, title, content);
     }
 
     // 5. Search should work again
-    const afterResults = searchFTS(db2, "Kubernetes deploy", 10, undefined, "docs");
+    const afterResults = await searchFTS(db2, "Kubernetes deploy", 10, undefined, "docs");
     expect(afterResults.length).toBeGreaterThan(0);
     expect(afterResults[0].title).toBe("k8s-deploy");
 
@@ -430,6 +443,8 @@ Use kubectl apply to deploy manifests.
         insertDocument(db, "hwicortex", filePath, title, h, now, now, {
           source_type: sourceType,
         });
+        const idxDocId = getDocumentId(db, "hwicortex", filePath);
+        await upsertFTS(db, idxDocId!, filePath, title, content);
       }
     }
 
@@ -438,13 +453,13 @@ Use kubectl apply to deploy manifests.
     await indexDir(join(vaultDir, "knowledge"), "knowledge");
 
     // Verify all three types are searchable
-    const docsResults = searchFTS(db, "API", 10, undefined, "docs");
+    const docsResults = await searchFTS(db, "API", 10, undefined, "docs");
     expect(docsResults.length).toBeGreaterThan(0);
 
-    const sessionResults = searchFTS(db, "API", 10, undefined, "sessions");
+    const sessionResults = await searchFTS(db, "API", 10, undefined, "sessions");
     expect(sessionResults.length).toBeGreaterThan(0);
 
-    const knowledgeResults = searchFTS(db, "API", 10, undefined, "knowledge");
+    const knowledgeResults = await searchFTS(db, "API", 10, undefined, "knowledge");
     expect(knowledgeResults.length).toBeGreaterThan(0);
 
     store.close();

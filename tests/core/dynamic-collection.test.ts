@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach } from "vitest";
 import { openDatabase } from "../../src/db.js";
 import type { Database } from "../../src/db.js";
 import { runMigrations, DEFAULT_MIGRATIONS } from "../../src/migration/runner.js";

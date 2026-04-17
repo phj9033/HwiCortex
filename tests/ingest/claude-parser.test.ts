@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { ClaudeSessionParser } from "../../src/ingest/session-parser/claude";
 import path from "path";
 

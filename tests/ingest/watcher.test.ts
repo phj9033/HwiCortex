@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, beforeEach } from "bun:test";
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { SessionWatcher } from "../../src/ingest/watcher.js";
 import { mkdtemp, writeFile, rm, mkdir } from "node:fs/promises";
 import { join } from "node:path";

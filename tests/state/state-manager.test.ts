@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { StateManager } from "../../src/state/state-manager.js";
 import type { AppState } from "../../src/state/state-manager.js";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";

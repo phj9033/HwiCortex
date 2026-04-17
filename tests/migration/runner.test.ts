@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, unlinkSync, copyFileSync } from "fs";
 import { openDatabase } from "../../src/db.js";
 import type { Database } from "../../src/db.js";

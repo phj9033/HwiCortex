@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { classify } from "../../src/knowledge/classifier";
 
 describe("Classifier", () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect } from "vitest";
 import { KnowledgeExtractor, ExtractedKnowledge } from "../../src/knowledge/extractor";
 import { LlmProvider } from "../../src/knowledge/llm-provider";
 
