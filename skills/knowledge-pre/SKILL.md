@@ -6,7 +6,18 @@ user_invocable: true
 
 # Knowledge Pre — 작업 전 지식 검색
 
-작업 시작 전 관련 위키 지식을 검색하여 컨텍스트에 로드한다.
+작업 시작 전 hwicortex 위키에서 관련 지식을 검색하여 컨텍스트에 로드한다.
+
+## 설정
+
+다른 프로젝트에 복사할 때 아래 값만 변경한다:
+
+| 변수 | 설명 | 기본값 |
+|------|------|--------|
+| `WIKI_PROJECT` | wiki --project 인자 | 현재 디렉토리명 |
+| `WIKI_COLLECTION` | hwicortex -c 인자 | `wiki` |
+
+> 프로젝트명이 지정되지 않으면 현재 작업 디렉토리 이름을 사용한다.
 
 ## 트리거
 
@@ -21,7 +32,7 @@ user_invocable: true
 
 2. **지식 검색**
    ```bash
-   hwicortex query "<작업 의도 키워드>" -c wiki --json -n 5
+   hwicortex query "<작업 의도 키워드>" -c $WIKI_COLLECTION --json -n 5
    ```
    - 검색 결과가 없으면 → `관련 지식 없음` 한 줄 출력 후 즉시 작업 진행.
    - 에러 발생 시 → 에러 메시지 출력 후 작업 진행 (블로킹하지 않음).
@@ -38,7 +49,7 @@ user_invocable: true
    - 관련도가 높다고 판단한 항목만 원문 로드 (최대 2건).
    - body가 2000토큰(약 8000자)을 초과하면 스킵.
    ```bash
-   hwicortex wiki show "<title>" --project <project>
+   hwicortex wiki show "<title>" --project $WIKI_PROJECT
    ```
    - show 호출 시 hit_count가 자동 증가하여 importance가 올라감.
 
@@ -51,6 +62,6 @@ user_invocable: true
 ## Rules
 
 - 검색 실패 또는 결과 없음 시 **절대 블로킹하지 않는다**. 즉시 작업 진행.
-- 원문 로드는 최대 2건. 토큰 예산을 지켜라.
-- wiki 컬렉션이 등록되지 않은 경우 `-c wiki` 검색이 빈 결과를 반환할 수 있다. 그래도 진행.
+- 원문 로드는 최대 2건. 토큰 예산을 지켜라. 추가 로드 필요하면 요청.
+- wiki 컬렉션이 등록되지 않은 경우 검색이 빈 결과를 반환할 수 있다. 그래도 진행.
 - 이 스킬의 목적은 참고 정보 제공이다. 작업 흐름을 지연시키지 말 것.
