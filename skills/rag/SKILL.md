@@ -1,0 +1,147 @@
+---
+name: rag
+description: Search hwicortex collections and use results for document writing, evaluation, or search result presentation. Manual trigger only via /rag.
+user_invocable: true
+---
+
+# RAG — HwiCortex 컬렉션 기반 검색 활용
+
+HwiCortex 컬렉션에서 관련 문서를 검색하여 작성(write), 평가(review), 또는 검색(search) 작업을 수행한다.
+도메인에 무관하게 동작한다 (게임기획, 기술문서, 사내규정, 법률 등).
+
+## 트리거
+
+- 수동: `/rag`, `/rag write`, `/rag review`, `/rag search`
+
+## 입력 파싱
+
+### 호출 형태
+
+```
+/rag "전투 시스템 기획서 작성해줘, game-method 컬렉션"
+/rag write "보상 루프 설계, game-method"
+/rag review ~/projects/my-game/combat.md -c game-method
+/rag search "밸런싱 DPS 곡선" -c game-method
+```
+
+### 모드 감지
+
+1. 첫 토큰이 `write`/`review`/`search`이면 해당 모드.
+2. 아니면 텍스트에서 자동 판단:
+   - "작성/만들어줘/기획서/문서 작성" 또는 "write/create/draft" → **write**
+   - "평가/검토/리뷰/분석" 또는 "review/evaluate/assess" → **review**
+   - 그 외 → **search**
+
+### 컬렉션 감지
+
+1. `-c <name>` 플래그가 있으면 사용 (확실).
+2. 없으면 `hwicortex collection list` 결과와 텍스트를 대조하여 매칭 (best-effort).
+3. 둘 다 없으면 전체 컬렉션 검색.
+
+컬렉션 검증은 공통 검색 파이프라인 Step 2에서 수행. 여기서는 파싱만 한다.
+
+## 공통 검색 파이프라인
+
+모든 모드가 공유하는 핵심 절차.
+
+### Step 1 — 요청 분석
+
+사용자 요청에서 핵심 주제/키워드를 추출한다. 복합 주제면 하위 주제로 분해.
+
+예: "전투 시스템 기획서" → 전투 루프, 밸런싱, 스킬 시스템, 보상
+
+### Step 2 — 컬렉션 확인
+
+```bash
+hwicortex collection list
+```
+
+파싱된 컬렉션이 목록에 있는지 확인. 없으면 사용자에게 알리고 유사 이름 제안.
+
+### Step 3 — 반복 검색
+
+주제별로 하이브리드 검색 수행:
+
+```bash
+# 기본: 하이브리드 검색 (최고 품질)
+hwicortex query "<주제>" -c <collection> --full --json -n 5
+
+# 모호한 키워드는 --intent로 맥락 좁히기
+hwicortex query "밸런싱" -c <collection> --intent "전투 수치 DPS" --full --json -n 5
+```
+
+- 주제마다 검색 수행
+- 결과 부족 시 키워드 변형하여 재검색
+- 중복 제거, 관련도 높은 문서 선별
+
+**검색 명령어 선택:**
+
+| 상황 | 명령어 |
+|------|--------|
+| 기본 (최고 품질) | `hwicortex query` |
+| LLM 없이 빠르게 | `hwicortex search` |
+| 의미적 유사도만 | `hwicortex vsearch` |
+| 특정 문서 전문 조회 | `hwicortex get` / `multi-get` |
+
+1차로 `query` 사용. 보완 필요 시 `search`나 `get`으로 추가 조회.
+
+### Step 4 — 컨텍스트 구성
+
+선별된 문서들을 정리하여 이후 모드별 작업의 근거로 사용.
+
+### 토큰 예산
+
+- 검색 결과 총량: **20,000토큰 이내** (약 80,000자)
+- 주제당 `-n 5` 기본, 충분하면 줄여도 됨
+- `--full`은 핵심 문서에만. 탐색 단계에서는 스니펫으로 관련도 확인 후 `hwicortex get`으로 전문 조회
+- 단일 문서 5,000토큰 초과 시 관련 섹션만 발췌
+
+## 모드별 가이드라인
+
+### write 모드
+
+1. 공통 검색 파이프라인 실행
+2. 검색된 문서 기반으로 구조(목차) 초안 제시
+3. 사용자 확인 후 섹션별 작성 (목차 수정, 섹션 생략 요청 수용)
+4. 각 섹션에 근거 문서를 참조 표기
+5. 검색 결과가 전혀 없으면 Rules의 "검색 결과 없음" 규칙에 따라 사용자에게 확인 후 진행
+6. 부분적으로 검색 결과에 없는 내용: `> 참조 없음 — 일반 지식 기반`
+
+### review 모드
+
+1. 평가 대상 파일을 읽음 (경로 지정 또는 대화 내 텍스트)
+2. 대상에서 핵심 주제 추출 → 공통 검색 파이프라인 실행
+3. 검색된 기준 문서에서 평가 축(항목) 도출 — 문서에 명시된 원칙/규칙이 평가 항목
+4. 항목별 기준 문서와 대조 평가
+5. 결과 포맷:
+   - 항목별 평가: 점수(A~F 또는 100점 척도) + 참조 문서 + 근거
+   - 기준 문서 없는 영역: "해당 기준 없음 — 평가 생략"
+   - 개선 제안 (참조 문서 구체적 섹션 포함)
+   - 종합 평가
+
+### search 모드 (기본)
+
+1. 공통 검색 파이프라인 실행
+2. 검색 결과 요약 제시 (문서 경로, 관련 내용 스니펫, 관련도)
+3. 사용자가 특정 문서를 더 보고 싶으면 `hwicortex get`으로 전문 조회
+
+## 출처 명시 규칙 (전 모드 공통)
+
+```markdown
+> 참조: <컬렉션명>/<문서경로>
+```
+
+- 모든 근거 있는 주장/내용에 **반드시** 참조 표기
+- 여러 문서 참조 시 복수 표기
+- 검색 결과에 없는 내용: `> 참조 없음 — 일반 지식 기반`
+
+## Rules
+
+- 검색 실패 또는 에러 시 에러 메시지 출력 후 가능한 범위에서 작업 계속.
+- 컬렉션 없음: 사용자에게 알리고 등록 방법 안내:
+  ```
+  hwicortex collection add <path> --name <name> --mask "**/*.md"
+  hwicortex update --embed
+  ```
+- 검색 결과 없음: "관련 문서를 찾지 못했습니다" 출력 후, 일반 지식 기반으로 작업할지 사용자에게 확인.
+- `hwicortex` 명령은 Bash 도구로 실행. 직접 DB 수정 금지.
