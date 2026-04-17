@@ -30,7 +30,7 @@ HwiCortex 컬렉션에서 관련 문서를 검색하여 작성(write), 평가(re
 2. 아니면 텍스트에서 자동 판단:
    - "작성/만들어줘/기획서/문서 작성" 또는 "write/create/draft" → **write**
    - "평가/검토/리뷰/분석" 또는 "review/evaluate/assess" → **review**
-   - 그 외 → **search**
+   - 모호하면 → **search** (사용자에게 다른 모드 원하는지 확인)
 
 ### 컬렉션 감지
 
@@ -63,11 +63,14 @@ hwicortex collection list
 주제별로 하이브리드 검색 수행:
 
 ```bash
-# 기본: 하이브리드 검색 (최고 품질)
-hwicortex query "<주제>" -c <collection> --full --json -n 5
+# 1차: 스니펫으로 관련도 탐색
+hwicortex query "<주제>" -c <collection> --json -n 5
 
 # 모호한 키워드는 --intent로 맥락 좁히기
-hwicortex query "밸런싱" -c <collection> --intent "전투 수치 DPS" --full --json -n 5
+hwicortex query "밸런싱" -c <collection> --intent "전투 수치 DPS" --json -n 5
+
+# 관련도 높은 문서만 전문 조회
+hwicortex get "<collection>/<문서경로>" --full
 ```
 
 - 주제마다 검색 수행
@@ -88,6 +91,11 @@ hwicortex query "밸런싱" -c <collection> --intent "전투 수치 DPS" --full 
 ### Step 4 — 컨텍스트 구성
 
 선별된 문서들을 정리하여 이후 모드별 작업의 근거로 사용.
+
+- 문서 경로 기준으로 중복 제거
+- 관련도 순으로 정렬
+- 각 발췌에 출처 경로를 붙여 둠 (출처 명시에 사용)
+- 총량이 토큰 예산을 초과하면 관련도 낮은 문서부터 제거
 
 ### 토큰 예산
 
