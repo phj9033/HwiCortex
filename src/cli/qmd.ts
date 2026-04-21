@@ -2574,6 +2574,7 @@ function parseCLI() {
       stdin: { type: "boolean" },
       "add-source": { type: "string" },
       "vault-dir": { type: "string" },
+      reset: { type: "boolean" },
     },
     allowPositionals: true,
     strict: false, // Allow unknown options to pass through
@@ -2787,6 +2788,7 @@ function showHelp(): void {
   console.log("    --max-docs-per-batch <n>    - Cap docs loaded into memory per embedding batch");
   console.log("    --max-batch-mb <n>          - Cap UTF-8 MB loaded into memory per embedding batch");
   console.log("  hwicortex cleanup                   - Clear caches, vacuum DB");
+  console.log("  hwicortex cleanup --reset           - Delete DB entirely (rebuild with update --embed)");
   console.log("");
   console.log("Query syntax (hwicortex query):");
   console.log("  QMD queries are either a single expand query (no prefix) or a multi-line");
@@ -3304,6 +3306,27 @@ if (isMain) {
     }
 
     case "cleanup": {
+      if (cli.values.reset) {
+        // Full database reset — delete and recreate
+        const dbPath = getDbPath();
+        if (!cli.values.yes) {
+          const rl = createInterface({ input: process.stdin, output: process.stdout });
+          const answer = await rl.question(`${c.yellow}This will delete the entire database at ${dbPath}. Continue? [y/N] ${c.reset}`);
+          rl.close();
+          if (answer.toLowerCase() !== "y") {
+            console.log("Aborted.");
+            break;
+          }
+        }
+        closeDb();
+        try { unlinkSync(dbPath); } catch {}
+        try { unlinkSync(dbPath + "-wal"); } catch {}
+        try { unlinkSync(dbPath + "-shm"); } catch {}
+        console.log(`${c.green}✓${c.reset} Database deleted: ${dbPath}`);
+        console.log(`${c.dim}Run 'hwicortex update --embed' to rebuild.${c.reset}`);
+        break;
+      }
+
       const db = getDb();
 
       // 1. Clear llm_cache

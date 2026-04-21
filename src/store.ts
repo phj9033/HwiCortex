@@ -1961,6 +1961,10 @@ export function deleteInactiveDocuments(db: Database): number {
 export function cleanupOrphanedContent(db: Database): number {
   const orphanHashSubquery = `SELECT hash FROM content WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)`;
   db.exec(`DELETE FROM content_vectors WHERE hash IN (${orphanHashSubquery})`);
+  // Clean up graph tables that reference content(hash)
+  db.exec(`DELETE FROM symbols WHERE hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM relations WHERE source_hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM cluster_members WHERE hash IN (${orphanHashSubquery})`);
 
   const result = db.prepare(`
     DELETE FROM content
@@ -2645,9 +2649,13 @@ export function removeCollection(db: Database, collectionName: string): { delete
   // Delete documents from database
   const docResult = db.prepare(`DELETE FROM documents WHERE collection = ?`).run(collectionName);
 
-  // Clean up orphaned content vectors
+  // Clean up orphaned content and all FK dependents
   const orphanHashSubquery = `SELECT hash FROM content WHERE hash NOT IN (SELECT DISTINCT hash FROM documents WHERE active = 1)`;
   db.exec(`DELETE FROM content_vectors WHERE hash IN (${orphanHashSubquery})`);
+  // Clean up graph tables that reference content(hash)
+  db.exec(`DELETE FROM symbols WHERE hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM relations WHERE source_hash IN (${orphanHashSubquery})`);
+  db.exec(`DELETE FROM cluster_members WHERE hash IN (${orphanHashSubquery})`);
 
   // Clean up orphaned content hashes (now safe after removing FK dependents)
   const cleanupResult = db.prepare(`
