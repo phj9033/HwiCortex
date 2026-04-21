@@ -378,6 +378,20 @@ export type LlamaCppConfig = {
   disposeModelsOnInactivity?: boolean;
 };
 
+// Bun v1.2.x NAPI finalizer bug: context.dispose() triggers
+// AddonContext::dispose() on a worker thread which races with GC,
+// hitting a fatal assertion (uncatchable abort()).
+// When set, skip explicit native dispose and let _exit(2) handle cleanup.
+let _deferNativeDispose = false;
+
+/**
+ * Enable deferred native dispose mode.
+ * Call this early in CLI entry points that use _exit(2) for cleanup.
+ */
+export function setDeferNativeDispose(enabled: boolean): void {
+  _deferNativeDispose = enabled;
+}
+
 /**
  * LLM implementation using node-llama-cpp
  */
@@ -1026,8 +1040,11 @@ export class LlamaCpp implements LLM {
         done: true,
       };
     } finally {
-      // Dispose context (which disposes dependent sequences/sessions per lifecycle rules)
-      await context.dispose();
+      // Dispose context (which disposes dependent sequences/sessions per lifecycle rules).
+      // Skip under Bun CLI: _exit(2) handles cleanup without triggering NAPI finalizer bug.
+      if (!_deferNativeDispose) {
+        await context.dispose();
+      }
     }
   }
 
@@ -1135,14 +1152,14 @@ export class LlamaCpp implements LLM {
       if (includeLexical) fallback.unshift({ type: 'lex', text: query });
       return fallback;
     } finally {
-      // Dispose grammar before genContext to prevent NAPI finalizer crash.
-      // grammar is a native NAPI object from node-llama-cpp; if left to GC,
-      // its finalizer tries to create new JS objects during collection,
-      // triggering "non-GC-safe function inside a NAPI finalizer" in Bun.
-      if (grammar && typeof (grammar as any).dispose === 'function') {
-        await (grammar as any).dispose();
+      // Skip native dispose under Bun CLI: _exit(2) handles cleanup without
+      // triggering NAPI finalizer bug (AddonContext::dispose() races with GC).
+      if (!_deferNativeDispose) {
+        if (grammar && typeof (grammar as any).dispose === 'function') {
+          await (grammar as any).dispose();
+        }
+        await genContext.dispose();
       }
-      await genContext.dispose();
     }
   }
 
@@ -1291,8 +1308,9 @@ export class LlamaCpp implements LLM {
 
     // Disposing llama cascades to models and contexts automatically
     // See: https://node-llama-cpp.withcat.ai/guide/objects-lifecycle
+    // Skip under Bun CLI: _exit(2) handles cleanup without triggering NAPI finalizer bug.
     // Note: llama.dispose() can hang indefinitely, so we use a timeout
-    if (this.llama) {
+    if (this.llama && !_deferNativeDispose) {
       const disposePromise = this.llama.dispose();
       const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 1000));
       await Promise.race([disposePromise, timeoutPromise]);

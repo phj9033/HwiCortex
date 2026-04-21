@@ -82,7 +82,7 @@ import {
   getDocumentId,
 } from "../store.js";
 import { isMecabAvailable } from "../korean.js";
-import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, pullModels, DEFAULT_EMBED_MODEL_URI, DEFAULT_GENERATE_MODEL_URI, DEFAULT_RERANK_MODEL_URI, DEFAULT_MODEL_CACHE_DIR } from "../llm.js";
+import { disposeDefaultLlamaCpp, getDefaultLlamaCpp, setDefaultLlamaCpp, LlamaCpp, withLLMSession, pullModels, DEFAULT_EMBED_MODEL_URI, DEFAULT_GENERATE_MODEL_URI, DEFAULT_RERANK_MODEL_URI, DEFAULT_MODEL_CACHE_DIR, setDeferNativeDispose } from "../llm.js";
 import {
   formatSearchResults,
   formatDocuments,
@@ -2880,6 +2880,12 @@ const isMain = argv1 === __filename
   || argv1?.endsWith("/qmd.js")
   || (argv1 != null && realpathSync(argv1) === __filename);
 if (isMain) {
+  // Bun v1.2.x: skip explicit native context dispose to avoid NAPI finalizer
+  // abort. _exit(2) at process end handles all cleanup safely.
+  if (typeof globalThis.Bun !== 'undefined') {
+    setDeferNativeDispose(true);
+  }
+
   const cli = parseCLI();
 
   if (cli.values.version) {
