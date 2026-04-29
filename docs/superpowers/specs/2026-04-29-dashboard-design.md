@@ -247,7 +247,7 @@ Pagination on the results page: 20 per page, prev/next buttons.
 
 | Condition | Message |
 |---|---|
-| `QMD_VAULT_DIR` not set | `Error: QMD_VAULT_DIR not set. Set it or pass --vault <path>.` |
+| `QMD_VAULT_DIR` not set | `Error: QMD_VAULT_DIR not set.` |
 | Vault path missing | `Error: Vault path not found: <path>` |
 | Port in use | `Error: Port N in use. Try --port <n>.` |
 | SQLite index missing | `Error: Index DB not found. Run 'hwicortex collection add ...' first.` |

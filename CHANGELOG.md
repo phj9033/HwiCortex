@@ -7,6 +7,7 @@
 - `wiki list --json` outputs full WikiMeta fields as JSON array (filePath excluded)
 - `update --embed` flag runs embedding automatically after index update
 - Knowledge loop skills: `/knowledge-pre` (작업 전 지식 검색), `/knowledge-post` (작업 후 지식 저장), `/knowledge-ingest` (세션 배치 처리), `/knowledge-tidy` (지식 정리)
+- `dashboard` subcommand: local browser dashboard for collections, wiki activity, alerts, and FTS search
 
 ### Changes
 

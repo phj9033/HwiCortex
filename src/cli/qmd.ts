@@ -2575,6 +2575,9 @@ function parseCLI() {
       "add-source": { type: "string" },
       "vault-dir": { type: "string" },
       reset: { type: "boolean" },
+      // Dashboard options
+      port: { type: "string" },
+      "no-open": { type: "boolean" },
     },
     allowPositionals: true,
     strict: false, // Allow unknown options to pass through
@@ -2780,6 +2783,9 @@ function showHelp(): void {
   console.log("  hwicortex wiki rm <title> --project <name>");
   console.log("  hwicortex wiki list [--project <name>] [--tag <tag>]");
   console.log("  hwicortex wiki show <title> --project <name> [--json]");
+  console.log("");
+  console.log("Dashboard:");
+  console.log("  hwicortex dashboard [--port 7777] [--no-open]    - Local browser dashboard");
   console.log("");
   console.log("Maintenance:");
   console.log("  hwicortex status                    - View index + collection health");
@@ -3161,6 +3167,18 @@ if (isMain) {
           console.error("Run 'hwicortex collection help' for usage");
           process.exit(1);
       }
+      break;
+    }
+
+    case "dashboard": {
+      const port = Number(cli.values.port ?? 7777);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        console.error(`Error: Invalid port "${cli.values.port}". Use a number between 1 and 65535.`);
+        process.exit(1);
+      }
+      const open = cli.values["no-open"] !== true;
+      const { runDashboard } = await import("./dashboard.js");
+      await runDashboard({ port, open });
       break;
     }
 
