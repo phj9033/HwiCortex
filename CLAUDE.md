@@ -17,50 +17,9 @@ bun src/cli/qmd.ts <command>    # 소스에서 직접 실행 (빌드 불필요)
 npx vitest run --reporter=verbose test/
 ```
 
-## CLI 레퍼런스
+## CLI
 
-```sh
-# 컬렉션
-collection add <path> --name <n> [--mask <glob>]
-collection list | remove <name> | rename <old> <new>
-ls [collection[/path]]
-
-# 검색
-query <query>           # 하이브리드 (확장 + BM25 + 벡터 + 리랭킹)
-search <query>          # BM25 키워드 (LLM 불필요)
-vsearch <query>         # 벡터 유사도
-
-# 조회
-get <file|#docid>       # 단일 문서
-multi-get <pattern>     # 복수 문서 (glob 또는 쉼표 구분)
-
-# 인덱스
-status | update [--pull] [--embed] | embed | pull | cleanup
-
-# 컨텍스트
-context add [path] "text" | context list | context check | context rm <path>
-
-# 위키
-wiki create "제목" --project <n> [--tags t1,t2] [--body "..."] [--stdin] [--auto-merge] [--force]
-wiki update | show | rm | list | link | unlink | links | index | reset-importance
-
-# 지식 추출
-ingest <path> [--name <n>] [--pattern <p>]
-extract [--session <id>] [--dry-run]
-watch
-rebuild
-```
-
-### 자주 쓰는 옵션
-
-```sh
--c, --collection <name>   # 특정 컬렉션만
--n <num>                  # 결과 수
---full                    # 전체 내용
---json | --csv | --md | --xml | --files
---line-numbers            # 줄번호
---intent <text>           # 검색 의도 힌트
-```
+전체 명령/옵션은 `hwicortex --help` 또는 `hwicortex <command> --help` 참조. 진입점은 `src/cli/qmd.ts`.
 
 ## 아키텍처 요약
 
@@ -71,16 +30,7 @@ rebuild
 - **위키**: Obsidian 호환 마크다운, importance/hit_count 자동 추적
 - **지식 추출**: AI 세션 파싱 → LLM 기반 인사이트 추출 → 볼트 저장
 
-## SDK
-
-```typescript
-import { createStore } from "hwicortex";
-const store = await createStore({ dbPath: "./index.sqlite", config: { collections: { docs: { path: "./docs", pattern: "**/*.md" } } } });
-const results = await store.search({ query: "auth flow" });
-await store.close();
-```
-
-진입점: `src/index.ts` → `dist/index.js`
+SDK 진입점: `src/index.ts` → `dist/index.js` (사용 예시는 README 참조)
 
 ## 릴리스
 
@@ -93,12 +43,4 @@ await store.close();
 "정리해줘", "기록해줘" 등의 요청 시에도 제안. 자동 실행 금지 — 항상 승인 대기.
 knowledge-post 스킬도 인사이트 목록을 보여준 후 사용자 승인을 받아 저장한다.
 
-## 지식 루프 설정
-
-```sh
-# wiki vault를 컬렉션으로 등록 (1회)
-hwicortex collection add <vault>/wiki --name wiki --mask "**/*.md"
-hwicortex update --embed
-```
-
-스킬: `/knowledge-pre`, `/knowledge-post`, `/knowledge-ingest`, `/knowledge-tidy`
+지식 루프 스킬: `/knowledge-pre`, `/knowledge-post`, `/knowledge-ingest`, `/knowledge-tidy` (vault 등록은 README 참조)

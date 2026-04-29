@@ -15,6 +15,27 @@ bun link          # 'hwicortex' 글로벌 등록
 
 Node.js >= 22 또는 Bun >= 1.0 필요.
 
+### 한국어 검색 (선택)
+
+한국어 형태소 분석을 통한 BM25 품질 향상을 위해 `mecab-ko`를 설치한다. 미설치 시에도 동작하지만 한국어 검색 품질이 제한된다.
+
+```sh
+# macOS
+brew install mecab mecab-ko-dic
+
+# Ubuntu / Debian
+sudo apt install mecab libmecab-dev
+install-mecab-ko-dic
+```
+
+설치 후 기존 인덱스를 재구축해야 한국어 토큰화가 적용된다:
+
+```sh
+hwicortex rebuild
+```
+
+설치 여부는 `which mecab`으로 확인할 수 있다. 첫 실행 시 미설치 상태면 안내 메시지가 한 번 출력된다.
+
 ## 빠른 시작
 
 ```sh
