@@ -235,7 +235,393 @@ export async function startServer(opts: {
 }
 
 function renderHtml(): string {
-  return "<!doctype html><html><body><div id=app></div></body></html>";
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HwiCortex Dashboard</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f5f5f5;
+}
+
+/* ---- Layout ---- */
+.container { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+
+/* ---- Header ---- */
+header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 16px;
+}
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 52px;
+}
+.header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+.tabs { display: flex; gap: 4px; }
+.tab {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #555;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover { background: #f0f0f0; color: #111; }
+.tab.active { background: #e8f0fe; color: #1a56db; }
+.spacer { flex: 1; }
+.btn-refresh {
+  padding: 6px 14px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: #fff;
+  color: #444;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.12s;
+}
+.btn-refresh:hover { background: #f0f0f0; }
+
+/* ---- Search bar ---- */
+#search-bar {
+  background: #fff;
+  border-bottom: 1px solid #e8e8e8;
+  padding: 10px 16px;
+}
+.search-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+}
+#search-input {
+  flex: 0 0 70%;
+  padding: 7px 12px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+#search-input:focus { border-color: #1a56db; }
+#collection-select {
+  flex: 0 0 25%;
+  padding: 7px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  background: #fff;
+  cursor: pointer;
+}
+#search-btn {
+  flex: 1;
+  padding: 7px 14px;
+  background: #1a56db;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+#search-btn:hover { background: #1447b0; }
+
+/* ---- Main view ---- */
+#view {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* ---- Cards ---- */
+.card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #111;
+}
+
+/* ---- Badges ---- */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.badge-warn { background: #fff3cd; color: #856404; border: 1px solid #ffc107; }
+.badge-info { background: #e9ecef; color: #495057; border: 1px solid #ced4da; }
+
+/* ---- Modal ---- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.hidden { display: none; }
+.modal-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 24px;
+  max-width: 560px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+}
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #888;
+  line-height: 1;
+}
+.modal-close:hover { color: #111; }
+
+/* ---- Search dropdown ---- */
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  max-height: calc(5 * 44px);
+  overflow-y: auto;
+  z-index: 150;
+}
+.dropdown-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+.dropdown-item:hover { background: #f5f5f5; }
+.dropdown-item:last-child { border-bottom: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <span class="header-title">HwiCortex</span>
+    <nav class="tabs">
+      <a href="#overview" class="tab" id="tab-overview">Overview</a>
+      <a href="#tags" class="tab" id="tab-tags">Tags</a>
+    </nav>
+    <div class="spacer"></div>
+    <button class="btn-refresh" id="btn-refresh">Refresh</button>
+  </div>
+</header>
+
+<section id="search-bar">
+  <div class="search-inner">
+    <input id="search-input" type="search" placeholder="Search documents…" autocomplete="off">
+    <select id="collection-select">
+      <option value="">All collections</option>
+    </select>
+    <button id="search-btn">Search</button>
+  </div>
+</section>
+
+<main id="view">
+  <p>Loading…</p>
+</main>
+
+<div class="modal-overlay hidden" id="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal-card" id="modal-card">
+    <button class="modal-close" id="modal-close" aria-label="Close">&#x2715;</button>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ---- fetchJson -------------------------------------------------------
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error("HTTP " + res.status + (text ? ": " + text.slice(0, 200) : ""));
+  }
+  return res.json();
+}
+
+function renderError(msg) {
+  document.getElementById("view").innerHTML =
+    '<div class="card"><p style="color:#c00">Failed to load: ' + escHtml(msg) +
+    '</p><button class="btn-refresh" onclick="route()" style="margin-top:8px">Retry</button></div>';
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ---- Hash router -----------------------------------------------------
+function parseHash() {
+  const hash = location.hash.replace(/^#/, "");
+  if (!hash) return { view: "overview", params: {} };
+
+  if (hash === "overview") return { view: "overview", params: {} };
+  if (hash === "tags") return { view: "tags", params: {} };
+
+  const collMatch = hash.match(/^collection\\/(.+)$/);
+  if (collMatch) return { view: "collection", params: { name: decodeURIComponent(collMatch[1]) } };
+
+  const wikiMatch = hash.match(/^wiki\\/([^\\/]+)\\/([^\\/]+)$/);
+  if (wikiMatch) return {
+    view: "wiki",
+    params: { project: decodeURIComponent(wikiMatch[1]), slug: decodeURIComponent(wikiMatch[2]) }
+  };
+
+  if (hash.startsWith("search")) {
+    const qStr = hash.replace(/^search\\??/, "");
+    const sp = new URLSearchParams(qStr);
+    return { view: "search", params: { q: sp.get("q") || "", collection: sp.get("collection") || "" } };
+  }
+
+  return { view: "overview", params: {} };
+}
+
+function setActiveTab(view) {
+  document.querySelectorAll(".tab").forEach(function(el) { el.classList.remove("active"); });
+  if (view === "overview") document.getElementById("tab-overview").classList.add("active");
+  if (view === "tags")     document.getElementById("tab-tags").classList.add("active");
+}
+
+function route() {
+  const { view, params } = parseHash();
+  setActiveTab(view);
+  try {
+    if (view === "overview") { renderOverview(); return; }
+    if (view === "tags")     { renderTags();    return; }
+    if (view === "collection") { renderCollection(params.name); return; }
+    if (view === "wiki")     { renderWiki(params.project, params.slug); return; }
+    if (view === "search")   { renderSearch(params.q, params.collection); return; }
+    renderOverview();
+  } catch(e) {
+    renderError(e.message || String(e));
+  }
+}
+
+// ---- Render stubs (replaced by Tasks 10-12) --------------------------
+function renderOverview() {
+  document.getElementById("view").innerHTML = "<p>Stub: Overview</p>";
+}
+
+function renderTags() {
+  document.getElementById("view").innerHTML = "<p>Stub: Tags</p>";
+}
+
+function renderCollection(name) {
+  document.getElementById("view").innerHTML = "<p>Stub: Collection " + escHtml(name || "") + "</p>";
+}
+
+function renderWiki(project, slug) {
+  document.getElementById("view").innerHTML =
+    "<p>Stub: Wiki " + escHtml(project || "") + "/" + escHtml(slug || "") + "</p>";
+}
+
+function renderSearch(q, coll) {
+  document.getElementById("view").innerHTML =
+    "<p>Stub: Search q=" + escHtml(q || "") + " collection=" + escHtml(coll || "") + "</p>";
+}
+
+// ---- Search bar ------------------------------------------------------
+function doSearch() {
+  const q = document.getElementById("search-input").value.trim();
+  const coll = document.getElementById("collection-select").value;
+  if (!q) return;
+  const qs = "q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "");
+  location.hash = "search?" + qs;
+}
+
+document.getElementById("search-btn").addEventListener("click", doSearch);
+document.getElementById("search-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") doSearch();
+});
+
+// Populate collection dropdown
+fetchJson("/api/overview").then(function(data) {
+  var sel = document.getElementById("collection-select");
+  (data.collections || []).forEach(function(c) {
+    var opt = document.createElement("option");
+    opt.value = c.name;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+}).catch(function() { /* ignore dropdown population failure */ });
+
+// ---- Refresh button --------------------------------------------------
+document.getElementById("btn-refresh").addEventListener("click", function() { route(); });
+
+// ---- Modal -----------------------------------------------------------
+function openModal(html) {
+  document.getElementById("modal-body").innerHTML = html;
+  document.getElementById("modal-overlay").classList.remove("hidden");
+}
+function closeModal() {
+  document.getElementById("modal-overlay").classList.add("hidden");
+  document.getElementById("modal-body").innerHTML = "";
+}
+document.getElementById("modal-close").addEventListener("click", closeModal);
+document.getElementById("modal-overlay").addEventListener("click", function(e) {
+  if (e.target === this) closeModal();
+});
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") closeModal();
+});
+
+// ---- Bootstrap -------------------------------------------------------
+window.addEventListener("hashchange", route);
+route();
+</script>
+</body>
+</html>`;
 }
 
 export type WikiPageMeta = {

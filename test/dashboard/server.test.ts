@@ -75,4 +75,14 @@ describe("HTTP routes", () => {
     // empty query → empty results regardless, but the route shouldn't 500
     expect(body.results).toEqual([]);
   });
+
+  it("GET / returns a non-trivial HTML shell", async () => {
+    const r = await fetch(baseUrl + "/");
+    expect(r.status).toBe(200);
+    const body = await r.text();
+    expect(body).toContain("<header");
+    expect(body).toContain('id="view"');
+    expect(body).toContain("hashchange");
+    expect(body).toContain("Overview");
+  });
 });
