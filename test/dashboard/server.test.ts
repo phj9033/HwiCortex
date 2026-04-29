@@ -104,4 +104,20 @@ describe("HTTP routes", () => {
     expect(body).toContain("marked"); // CDN script
     expect(body).toContain("backlinks");
   });
+
+  it("HTML shell includes search dropdown and pagination logic", async () => {
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    expect(body).toContain("search-dropdown");
+    expect(body).toContain("debounce");
+    expect(body).toContain("pagination");
+    expect(body).toContain("renderSearch");
+  });
+
+  it("GET /api/search?q=&limit=5 returns 200 with empty results", async () => {
+    const r = await fetch(baseUrl + "/api/search?q=&limit=5");
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.results).toEqual([]);
+  });
 });

@@ -420,26 +420,29 @@ header {
 .modal-close:hover { color: #111; }
 
 /* ---- Search dropdown ---- */
-.search-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: #fff;
-  border: 1px solid #ccc;
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  max-height: calc(5 * 44px);
-  overflow-y: auto;
-  z-index: 150;
-}
-.dropdown-item {
-  padding: 10px 12px;
-  cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-}
-.dropdown-item:hover { background: #f5f5f5; }
+#search-input-wrap { position: relative; flex: 0 0 70%; }
+#search-input { width: 100%; flex: none; }
+.search-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: #fff;
+  border: 1px solid #ccc; border-top: none; border-radius: 0 0 6px 6px;
+  max-height: calc(6 * 44px); overflow-y: auto; z-index: 150; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+.dropdown-item { padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.dropdown-item:hover, .dropdown-view-all:hover { background: #f0f4ff; }
 .dropdown-item:last-child { border-bottom: none; }
+.dropdown-view-all { color: #1a56db; font-size: 12px; padding: 8px 12px; text-align: center; cursor: pointer; }
+/* ---- Search results page ---- */
+.search-results { list-style: decimal; padding-left: 24px; margin-top: 12px; }
+.search-results li { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+.search-results li:last-child { border-bottom: none; }
+.search-results header { margin-bottom: 4px; }
+.search-results a { color: #1a56db; text-decoration: none; font-weight: 500; }
+.search-results a:hover { text-decoration: underline; }
+.snippet { font-size: 12px; color: #555; margin: 0; }
+.snippet mark { background: #fff3cd; padding: 0 2px; border-radius: 2px; }
+/* ---- Pagination ---- */
+.pagination { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 13px; }
+.pagination button { padding: 5px 14px; border: 1px solid #d0d0d0; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; }
+.pagination button:disabled { opacity: 0.4; cursor: default; }
+.pagination button:not(:disabled):hover { background: #f0f0f0; }
 
 /* ---- Vault header ---- */
 .vault-header { margin-bottom: 12px; }
@@ -538,7 +541,10 @@ header {
 
 <section id="search-bar">
   <div class="search-inner">
-    <input id="search-input" type="search" placeholder="Search documents…" autocomplete="off">
+    <div id="search-input-wrap">
+      <input id="search-input" type="search" placeholder="Search documents…" autocomplete="off">
+      <div class="search-dropdown" id="search-dropdown" style="display:none"></div>
+    </div>
     <select id="collection-select">
       <option value="">All collections</option>
     </select>
@@ -602,7 +608,8 @@ function parseHash() {
   if (hash.startsWith("search")) {
     const qStr = hash.replace(/^search\\??/, "");
     const sp = new URLSearchParams(qStr);
-    return { view: "search", params: { q: sp.get("q") || "", collection: sp.get("collection") || "" } };
+    const pageVal = parseInt(sp.get("page") || "0", 10);
+    return { view: "search", params: { q: sp.get("q") || "", collection: sp.get("collection") || "", page: isNaN(pageVal) || pageVal < 0 ? 0 : pageVal } };
   }
 
   return { view: "overview", params: {} };
@@ -622,7 +629,7 @@ function route() {
     if (view === "tags")     { renderTags();    return; }
     if (view === "collection") { renderCollection(params.name); return; }
     if (view === "wiki")     { renderWiki(params.project, params.slug); return; }
-    if (view === "search")   { renderSearch(params.q, params.collection); return; }
+    if (view === "search")   { renderSearch(params.q, params.collection, params.page || 0); return; }
     renderOverview();
   } catch(e) {
     renderError(e.message || String(e));
@@ -898,10 +905,136 @@ function renderWiki(project, slug) {
   });
 }
 
-function renderSearch(q, coll) {
-  document.getElementById("view").innerHTML =
-    "<p>Stub: Search q=" + escHtml(q || "") + " collection=" + escHtml(coll || "") + "</p>";
+function renderSearch(q, coll, page) {
+  page = page || 0;
+  var view = document.getElementById("view");
+  view.innerHTML = "<p>Loading…</p>";
+  var limit = 20;
+  var offset = page * limit;
+  var collLabel = coll ? escHtml(coll) : "All collections";
+  var url = "/api/search?q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "") + "&limit=" + limit + "&offset=" + offset;
+  fetchJson(url).then(function(data) {
+    var total = data.total || 0;
+    var results = data.results || [];
+    var totalPages = Math.ceil(total / limit) || 1;
+    var html = '<h2><a href="#overview" style="color:#1a56db;text-decoration:none">&#8592;</a> Search: &ldquo;' + escHtml(q) + '&rdquo; <small style="font-weight:normal;color:#666">in ' + collLabel + ', ' + escHtml(String(total)) + ' result' + (total === 1 ? "" : "s") + '</small></h2>';
+    if (total === 0) {
+      html += '<p style="margin-top:16px;color:#555">No results for &ldquo;' + escHtml(q) + '&rdquo;.</p>';
+    } else {
+      html += '<ol class="search-results">';
+      for (var i = 0; i < results.length; i++) {
+        var r = results[i];
+        var target = (r.collection === "wiki")
+          ? "#wiki/" + encodeURIComponent((r.path || "").split("/").slice(-2, -1)[0] || "") + "/" + encodeURIComponent((r.path || "").split("/").slice(-1)[0] || "").replace(/\\.md$/, "")
+          : "#collection/" + encodeURIComponent(r.collection || "");
+        html += '<li>';
+        html += '<header><a href="' + target + '">' + escHtml(r.title || r.path || "") + '</a>';
+        html += ' <small style="color:#888">' + escHtml(r.collection || "") + ' &middot; score ' + escHtml((r.score || 0).toFixed(3)) + '</small></header>';
+        html += '<p class="snippet"></p>';
+        html += '</li>';
+      }
+      html += '</ol>';
+      // Pagination
+      var prevDisabled = page === 0;
+      var nextDisabled = (page + 1) * limit >= total;
+      html += '<nav class="pagination">';
+      html += '<button id="pg-prev"' + (prevDisabled ? ' disabled' : '') + '>&#8592; Prev</button>';
+      html += '<span>Page ' + escHtml(String(page + 1)) + ' / ' + escHtml(String(totalPages)) + '</span>';
+      html += '<button id="pg-next"' + (nextDisabled ? ' disabled' : '') + '>Next &#8594;</button>';
+      html += '</nav>';
+    }
+    view.innerHTML = html;
+    // Inject snippets via innerHTML to preserve <mark> tags
+    var snippetEls = view.querySelectorAll(".snippet");
+    for (var si = 0; si < results.length && si < snippetEls.length; si++) {
+      snippetEls[si].innerHTML = results[si].snippet || "";
+    }
+    // Pagination click handlers
+    var prevBtn = document.getElementById("pg-prev");
+    var nextBtn = document.getElementById("pg-next");
+    if (prevBtn) {
+      prevBtn.addEventListener("click", function() {
+        var qs = "q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "") + "&page=" + (page - 1);
+        location.hash = "search?" + qs;
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener("click", function() {
+        var qs = "q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "") + "&page=" + (page + 1);
+        location.hash = "search?" + qs;
+      });
+    }
+  }).catch(function(err) { renderError(err.message || String(err)); });
 }
+
+// ---- Search dropdown -----------------------------------------------
+var searchInput = document.getElementById("search-input");
+var searchDropdown = document.getElementById("search-dropdown");
+var searchBar = document.getElementById("search-bar");
+var debounceId = 0;
+
+function closeDropdown() {
+  searchDropdown.style.display = "none";
+  searchDropdown.innerHTML = "";
+}
+
+function navigateToResult(r) {
+  if (r.collection === "wiki") {
+    var parts = (r.path || "").split("/");
+    var project = parts.slice(-2, -1)[0] || "";
+    var slug = (parts.slice(-1)[0] || "").replace(/\\.md$/, "");
+    location.hash = "#wiki/" + encodeURIComponent(project) + "/" + encodeURIComponent(slug);
+  } else {
+    location.hash = "#collection/" + encodeURIComponent(r.collection || "");
+  }
+  closeDropdown();
+}
+
+function runDropdownSearch() {
+  var q = searchInput.value.trim();
+  if (!q) { closeDropdown(); return; }
+  var coll = document.getElementById("collection-select").value;
+  var url = "/api/search?q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "") + "&limit=5";
+  fetchJson(url).then(function(data) {
+    var results = data.results || [];
+    var total = data.total || 0;
+    if (results.length === 0) { closeDropdown(); return; }
+    var html = "";
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      html += '<div class="dropdown-item" data-idx="' + i + '">' +
+        escHtml(r.title || r.path || "") +
+        ' <small style="color:#888">' + escHtml(r.collection || "") + '</small></div>';
+    }
+    if (total > 5) {
+      html += '<div class="dropdown-item dropdown-view-all" data-viewall="1">View all ' + escHtml(String(total)) + ' results</div>';
+    }
+    searchDropdown.innerHTML = html;
+    searchDropdown.style.display = "block";
+    // Attach click handlers
+    searchDropdown.querySelectorAll(".dropdown-item[data-idx]").forEach(function(el) {
+      var idx = parseInt(el.getAttribute("data-idx"), 10);
+      el.addEventListener("click", function(e) {
+        e.stopPropagation();
+        navigateToResult(results[idx]);
+      });
+    });
+    var viewAllEl = searchDropdown.querySelector("[data-viewall]");
+    if (viewAllEl) {
+      viewAllEl.addEventListener("click", function(e) {
+        e.stopPropagation();
+        var qs = "q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "");
+        location.hash = "search?" + qs;
+        closeDropdown();
+      });
+    }
+  }).catch(function() { closeDropdown(); });
+}
+
+searchInput.addEventListener("input", function() {
+  clearTimeout(debounceId);
+  debounceId = setTimeout(runDropdownSearch, 200);
+});
 
 // ---- Search bar ------------------------------------------------------
 function doSearch() {
@@ -910,11 +1043,17 @@ function doSearch() {
   if (!q) return;
   const qs = "q=" + encodeURIComponent(q) + (coll ? "&collection=" + encodeURIComponent(coll) : "");
   location.hash = "search?" + qs;
+  closeDropdown();
 }
 
 document.getElementById("search-btn").addEventListener("click", doSearch);
-document.getElementById("search-input").addEventListener("keydown", function(e) {
-  if (e.key === "Enter") doSearch();
+searchInput.addEventListener("keydown", function(e) {
+  if (e.key === "Enter") { closeDropdown(); doSearch(); }
+  if (e.key === "Escape") { closeDropdown(); searchInput.value = ""; }
+});
+
+document.addEventListener("click", function(e) {
+  if (!searchBar.contains(e.target)) closeDropdown();
 });
 
 // Populate collection dropdown
