@@ -116,11 +116,9 @@ export function getTags(_store: Store, vaultDir: string): { tags: Array<{ name: 
   const map = new Map<string, { count: number; projects: Set<string> }>();
   for (const w of wiki) {
     for (const tag of w.tags ?? []) {  // flat access — w.tags, NOT w.meta.tags
-      // Strip surrounding quotes that may come from JSON-formatted YAML
-      const cleanTag = tag.replace(/^"(.*)"$/, '$1');
-      const e = map.get(cleanTag) ?? { count: 0, projects: new Set() };
+      const e = map.get(tag) ?? { count: 0, projects: new Set() };
       e.count++; e.projects.add(w.project);  // flat access — w.project, NOT w.meta.project
-      map.set(cleanTag, e);
+      map.set(tag, e);
     }
   }
   return {

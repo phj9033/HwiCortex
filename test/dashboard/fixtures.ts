@@ -31,7 +31,11 @@ export function writeWikiPage(
     "---",
     `title: ${title}`,
     `project: ${project}`,
-    ...Object.entries(meta).map(([k, v]) => `${k}: ${JSON.stringify(v)}`),
+    ...Object.entries(meta).map(([k, v]) => {
+      if (Array.isArray(v)) return `${k}: [${v.join(", ")}]`;
+      if (typeof v === "number" || typeof v === "boolean") return `${k}: ${v}`;
+      return `${k}: ${JSON.stringify(v)}`;
+    }),
     "---",
     "",
     body,
