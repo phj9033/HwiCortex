@@ -189,6 +189,8 @@ LIMIT ? OFFSET ?;
 
 User input is wrapped as a phrase (`"..."`) before passing to `MATCH` to avoid FTS5 syntax errors on special characters.
 
+Implementation note: `bun:sqlite` positional parameters are reused per-position. The `(? IS NULL OR d.collection = ?)` clause requires the collection value (or `null`) to be bound to **two** positional slots. Pass it twice in the params array, or rewrite with named parameters (`@collection`).
+
 ### Caching
 None. Each request hits SQLite. Dashboard usage frequency makes the query cost negligible; cache invalidation bugs cost more than the save.
 
@@ -213,6 +215,8 @@ type Alert = {
 | `no-embedding` | warn | active docs without rows in `vec_documents` | `15 documents missing embeddings — vector search incomplete` | `hwicortex embed --collection <name>` |
 | `stale` | info | wiki page with `hit_count == 0` AND `created` >30 days ago | `5 wiki pages have never been hit (created >30d ago)` | links to filtered wiki list |
 
+`stale` is **aggregated** — one alert covering all matching pages, with the affected slugs listed inside the expanded body. Other alerts are also one-per-condition (e.g., one `overlap` per overlapping pair, one `no-context` per affected collection).
+
 ### Display Rules
 - Empty alerts → widget hidden entirely.
 - `warn` = yellow badge, `info` = gray badge.
@@ -230,7 +234,7 @@ type Alert = {
 - Inline dropdown: top 5 results with title + snippet. "View all N results" link → `#search?q=...`.
 - Enter key (anywhere in search input): immediate jump to `#search?q=...`.
 - ESC: close dropdown and clear input.
-- Empty query: dropdown closed.
+- Empty query (or whitespace-only): treated as empty — dropdown closed, no API call fired.
 - Zero results: "No results for '<q>'" message.
 - Special chars: input wrapped as FTS5 phrase to escape.
 - Korean: relies on existing mecab-ko tokenization on the indexing side; the dashboard query path must use the same store-level search function as the CLI to keep tokenization consistent.
@@ -346,7 +350,7 @@ The server **must not crash** on a single handler error. All handlers are wrappe
 
 ## 10. Open Questions / Future Work
 
-- Markdown rendering library choice (e.g., `marked` via CDN vs `<pre>` raw fallback) is an implementation detail — defer to plan phase.
+- Markdown rendering library choice (e.g., `marked` via CDN vs `<pre>` raw fallback) is an implementation detail — defer to plan phase. CDN is acceptable in v1 (no npm dep added, no build step impact); if offline use becomes a concern, the library can be vendored as a static asset later.
 - If/when widget count grows past ~7 or page count past ~5, revisit Approach 2 (Hono + Alpine + Tailwind).
 - Auto-fix actions (e.g., one-click "remove duplicate collection") would require shifting from Q2=D to Q2=C; intentionally deferred.
 - Tag color/grouping convention: future polish.
