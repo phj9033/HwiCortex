@@ -85,4 +85,13 @@ describe("HTTP routes", () => {
     expect(body).toContain("hashchange");
     expect(body).toContain("Overview");
   });
+
+  it("HTML shell includes overview rendering helpers", async () => {
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    expect(body).toContain("renderOverview");
+    expect(body).toContain("relTime");
+    expect(body).toContain("Health Alerts");
+    expect(body).toContain("/api/overview");
+  });
 });
