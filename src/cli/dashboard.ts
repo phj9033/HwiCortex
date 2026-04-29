@@ -1,7 +1,8 @@
-import { basename } from "path";
+import { basename, join } from "path";
+import { existsSync, readFileSync, statSync } from "fs";
 import type { Store } from "../store.js";
 import { getStoreCollections } from "../store.js";
-import { listWikiPages } from "../wiki.js";
+import { listWikiPages, parseFrontmatter } from "../wiki.js";
 
 export type DashboardOptions = { port: number; open: boolean };
 
@@ -125,5 +126,132 @@ export function getTags(_store: Store, vaultDir: string): { tags: Array<{ name: 
     tags: [...map.entries()]
       .map(([name, v]) => ({ name, count: v.count, projects: [...v.projects].sort() }))
       .sort((a, b) => b.count - a.count),
+  };
+}
+
+// ============================================================================
+// Detail helpers
+// ============================================================================
+
+export type CollectionDetail = {
+  name: string;
+  path: string;
+  pattern: string;
+  context: string | null;
+  files: Array<{ path: string; title: string | null; size: number; modified: string }>;
+};
+
+/**
+ * Returns full detail for a named collection, or null if not found.
+ * File size comes from the filesystem (defaults to 0 if unreadable).
+ */
+export function getCollectionDetail(store: Store, name: string): CollectionDetail | null {
+  const db = store.db;
+  const collections = getStoreCollections(db);
+  const coll = collections.find((c) => c.name === name);
+  if (!coll) return null;
+
+  const rows = db
+    .prepare("SELECT path, title, modified_at FROM documents WHERE collection=? AND active=1")
+    .all(coll.name) as Array<{ path: string; title: string; modified_at: string }>;
+
+  const files = rows.map((row) => {
+    let size = 0;
+    try {
+      const stat = statSync(row.path);
+      size = stat.size;
+    } catch {
+      // File not reachable — default size 0
+    }
+    return {
+      path: row.path,
+      title: row.title ?? null,
+      size,
+      modified: row.modified_at,
+    };
+  });
+
+  return {
+    name: coll.name,
+    path: coll.path,
+    pattern: coll.pattern ?? "**/*.md",
+    context: (coll.context as Record<string, string> | undefined)?.[""] ?? null,
+    files,
+  };
+}
+
+export type WikiPageDetail = {
+  meta: {
+    title: string;
+    project: string;
+    tags: string[];
+    importance: number;
+    hit_count: number;
+    sources: string[];
+    created: string | undefined;
+    updated: string | undefined;
+  };
+  body: string;
+  backlinks: Array<{ title: string; slug: string }>;
+};
+
+/**
+ * Returns detail for a wiki page identified by project + slug, or null if not found.
+ * Backlinks are computed by scanning all other pages in the same project for [[<title>]] refs.
+ */
+export function getWikiPageDetail(
+  _store: Store,
+  vaultDir: string,
+  project: string,
+  slug: string
+): WikiPageDetail | null {
+  const filePath = join(vaultDir, "wiki", project, `${slug}.md`);
+  if (!existsSync(filePath)) return null;
+
+  let content: string;
+  try {
+    content = readFileSync(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+
+  const { meta, body } = parseFrontmatter(content);
+
+  // Compute backlinks: scan same-project pages for [[<meta.title>]]
+  const allPages = listWikiPages(vaultDir, { project });
+  const targetTitle = meta.title;
+  const backlinkPattern = new RegExp(`\\[\\[${targetTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\]`);
+
+  const backlinks: Array<{ title: string; slug: string }> = [];
+  for (const page of allPages) {
+    // Skip the target page itself
+    if (basename(page.filePath).replace(/\.md$/, "").toLowerCase() === slug) continue;
+    try {
+      const pageContent = readFileSync(page.filePath, "utf-8");
+      const { body: pageBody } = parseFrontmatter(pageContent);
+      if (backlinkPattern.test(pageBody)) {
+        backlinks.push({
+          title: page.title,
+          slug: basename(page.filePath).replace(/\.md$/, "").toLowerCase(),
+        });
+      }
+    } catch {
+      // Skip unreadable pages
+    }
+  }
+
+  return {
+    meta: {
+      title: meta.title,
+      project: meta.project,
+      tags: meta.tags ?? [],
+      importance: meta.importance ?? 0,
+      hit_count: meta.hit_count ?? 0,
+      sources: meta.sources ?? [],
+      created: meta.created,
+      updated: meta.updated,
+    },
+    body,
+    backlinks,
   };
 }

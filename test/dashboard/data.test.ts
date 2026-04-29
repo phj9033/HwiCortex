@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { getOverview, getTags } from "../../src/cli/dashboard.js";
+import { getOverview, getTags, getCollectionDetail, getWikiPageDetail } from "../../src/cli/dashboard.js";
 import { makeTempStore, makeTempVault, writeWikiPage } from "./fixtures.js";
 
 describe("getOverview", () => {
@@ -43,5 +43,30 @@ describe("getTags", () => {
     const ui = tags.find(t => t.name === "ui")!;
     expect(ui.count).toBe(2);
     expect(ui.projects.sort()).toEqual(["p1", "p2"]);
+  });
+});
+
+describe("getCollectionDetail", () => {
+  it("returns null for unknown collection", () => {
+    const { store, cleanup } = makeTempStore();
+    try { expect(getCollectionDetail(store, "nope")).toBeNull(); }
+    finally { cleanup(); }
+  });
+});
+
+describe("getWikiPageDetail", () => {
+  let cleanup: (() => void) | null = null;
+  afterEach(() => { cleanup?.(); cleanup = null; });
+
+  it("returns frontmatter, body, and backlinks", () => {
+    const { store, cleanup: c } = makeTempStore(); cleanup = c;
+    const vault = makeTempVault();
+    writeWikiPage(vault, "p1", "Target", "target body");
+    writeWikiPage(vault, "p1", "Source", "see [[Target]]");
+
+    const detail = getWikiPageDetail(store, vault, "p1", "target");
+    expect(detail?.meta.title).toBe("Target");
+    expect(detail?.body).toContain("target body");
+    expect(detail?.backlinks.some(b => b.title === "Source")).toBe(true);
   });
 });
