@@ -1,5 +1,6 @@
 import { basename, join } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import type { Store } from "../store.js";
 import { getStoreCollections, searchFTS } from "../store.js";
 import { listWikiPages, parseFrontmatter } from "../wiki.js";
@@ -119,6 +120,113 @@ export type DashboardOptions = { port: number; open: boolean };
 
 export async function runDashboard(_opts: DashboardOptions): Promise<void> {
   throw new Error("not implemented");
+}
+
+// ============================================================================
+// HTTP Server
+// ============================================================================
+
+export type ServerHandle = { port: number; stop: () => void };
+
+export async function startServer(opts: {
+  port: number;
+  store: Store;
+  vaultDir: string;
+}): Promise<ServerHandle> {
+  const { port, store, vaultDir } = opts;
+
+  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    const rawUrl = req.url ?? "/";
+    const url = new URL(rawUrl, `http://127.0.0.1`);
+
+    const sendJson = (data: unknown, status = 200) => {
+      const body = JSON.stringify(data);
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(body);
+    };
+    const sendText = (text: string, status = 200, ct = "text/plain") => {
+      res.writeHead(status, { "content-type": ct });
+      res.end(text);
+    };
+
+    try {
+      if (url.pathname === "/") {
+        sendText(renderHtml(), 200, "text/html; charset=utf-8");
+        return;
+      }
+      if (url.pathname === "/api/overview") {
+        sendJson(getOverview(store, vaultDir));
+        return;
+      }
+      if (url.pathname === "/api/tags") {
+        sendJson(getTags(store, vaultDir));
+        return;
+      }
+      if (url.pathname === "/api/search") {
+        const q = url.searchParams.get("q") ?? "";
+        const coll = url.searchParams.get("collection") ?? undefined;
+        const limit = Number(url.searchParams.get("limit") ?? 20);
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        sendJson(await searchDashboard(store, q, coll, limit, offset));
+        return;
+      }
+      const cm = url.pathname.match(/^\/api\/collection\/([^/]+)$/);
+      if (cm) {
+        const name = decodeURIComponent(cm[1]);
+        if (name.includes("..") || name.includes("/")) {
+          sendText("Not found", 404);
+          return;
+        }
+        const detail = getCollectionDetail(store, name);
+        if (detail) {
+          sendJson(detail);
+        } else {
+          sendJson({ error: "Collection not found" }, 404);
+        }
+        return;
+      }
+      const wm = url.pathname.match(/^\/api\/wiki\/([^/]+)\/([^/]+)$/);
+      if (wm) {
+        const project = decodeURIComponent(wm[1]);
+        const slug = decodeURIComponent(wm[2]);
+        if (
+          [project, slug].some(
+            (s) => !s || s.includes("..") || s.includes("/") || s.includes("\\")
+          )
+        ) {
+          sendText("Not found", 404);
+          return;
+        }
+        const detail = getWikiPageDetail(store, vaultDir, project, slug);
+        if (detail) {
+          sendJson(detail);
+        } else {
+          sendJson({ error: "Wiki page not found" }, 404);
+        }
+        return;
+      }
+      sendText("Not found", 404);
+    } catch (err) {
+      console.error("[dashboard]", err);
+      sendJson({ error: (err as Error).message }, 500);
+    }
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.listen(port, "127.0.0.1", resolve);
+    server.once("error", reject);
+  });
+
+  const actualPort = (server.address() as { port: number }).port;
+
+  return {
+    port: actualPort,
+    stop: () => server.close(),
+  };
+}
+
+function renderHtml(): string {
+  return "<!doctype html><html><body><div id=app></div></body></html>";
 }
 
 export type WikiPageMeta = {
