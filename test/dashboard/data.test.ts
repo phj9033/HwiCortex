@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { getOverview } from "../../src/cli/dashboard.js";
+import { getOverview, getTags } from "../../src/cli/dashboard.js";
 import { makeTempStore, makeTempVault, writeWikiPage } from "./fixtures.js";
 
 describe("getOverview", () => {
@@ -21,5 +21,27 @@ describe("getOverview", () => {
     expect(result.wiki.topHits[0].hit_count).toBe(10);
     expect(result.wiki.highImportance.some(p => p.title === "Page A")).toBe(true);
     expect(result.alerts).toEqual([]); // alerts come in Task 6
+  });
+});
+
+describe("getTags", () => {
+  let cleanup: (() => void) | null = null;
+  afterEach(() => { cleanup?.(); cleanup = null; });
+
+  it("aggregates tag counts across pages and projects", () => {
+    const { store, cleanup: c } = makeTempStore(); cleanup = c;
+    const vault = makeTempVault();
+    writeWikiPage(vault, "p1", "A", "x", { tags: ["popup", "ui"] });
+    writeWikiPage(vault, "p1", "B", "x", { tags: ["popup"] });
+    writeWikiPage(vault, "p2", "C", "x", { tags: ["ui"] });
+
+    const { tags } = getTags(store, vault);
+
+    const popup = tags.find(t => t.name === "popup")!;
+    expect(popup.count).toBe(2);
+    expect(popup.projects).toEqual(["p1"]);
+    const ui = tags.find(t => t.name === "ui")!;
+    expect(ui.count).toBe(2);
+    expect(ui.projects.sort()).toEqual(["p1", "p2"]);
   });
 });
