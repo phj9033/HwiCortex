@@ -1,8 +1,9 @@
 import { basename, join } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
+import { spawn } from "node:child_process";
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import type { Store } from "../store.js";
-import { getStoreCollections, searchFTS } from "../store.js";
+import { createStore, getStoreCollections, searchFTS } from "../store.js";
 import { listWikiPages, parseFrontmatter } from "../wiki.js";
 
 // ============================================================================
@@ -125,8 +126,50 @@ export function detectAlerts(store: Store, vaultDir: string): Alert[] {
 
 export type DashboardOptions = { port: number; open: boolean };
 
-export async function runDashboard(_opts: DashboardOptions): Promise<void> {
-  throw new Error("not implemented");
+export async function runDashboard(opts: DashboardOptions): Promise<void> {
+  const vaultDir = process.env.QMD_VAULT_DIR;
+  if (!vaultDir) {
+    console.error("Error: QMD_VAULT_DIR not set.");
+    process.exit(1);
+  }
+  if (!existsSync(vaultDir)) {
+    console.error(`Error: Vault path not found: ${vaultDir}`);
+    process.exit(1);
+  }
+
+  let store: Store;
+  try {
+    store = createStore();
+  } catch {
+    console.error("Error: Index DB not found. Run 'hwicortex collection add ...' first.");
+    process.exit(1);
+    return; // unreachable, but TS needs it
+  }
+
+  let server: ServerHandle;
+  try {
+    server = await startServer({ port: opts.port, store, vaultDir });
+  } catch (e: any) {
+    if (String(e?.message ?? e).match(/EADDRINUSE|in use/i)) {
+      console.error(`Error: Port ${opts.port} in use. Try --port <n>.`);
+      process.exit(1);
+    }
+    throw e;
+  }
+
+  const url = `http://127.0.0.1:${server.port}`;
+  console.log(`HwiCortex dashboard: ${url}`);
+  if (opts.open) {
+    try { spawnOpen(url); } catch { /* swallow — URL already printed */ }
+  }
+
+  process.on("SIGINT", () => { server.stop(); process.exit(0); });
+  await new Promise(() => { /* keep alive until SIGINT */ });
+}
+
+function spawnOpen(url: string): void {
+  const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+  spawn(cmd, [url], { stdio: "ignore", detached: true }).unref();
 }
 
 // ============================================================================
