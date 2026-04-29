@@ -2777,12 +2777,15 @@ function showHelp(): void {
   console.log("  hwicortex context add/list/rm                      - Attach human-written summaries");
   console.log("  hwicortex ls [collection[/path]]                   - Inspect indexed files");
   console.log("");
-  console.log("Wiki (knowledge vault):");
+Wiki (knowledge vault):");
   console.log("  hwicortex wiki create <title> --project <name> [--tags t1,t2] [--body text]");
   console.log("  hwicortex wiki update <title> --project <name> [--append text] [--body text]");
   console.log("  hwicortex wiki rm <title> --project <name>");
   console.log("  hwicortex wiki list [--project <name>] [--tag <tag>]");
   console.log("  hwicortex wiki show <title> --project <name> [--json]");
+  console.log("");
+  console.log("Dashboard:");
+  console.log("  hwicortex dashboard [--port 7777] [--no-open]    - Local browser dashboard");
   console.log("");
   console.log("Maintenance:");
   console.log("  hwicortex status                    - View index + collection health");
