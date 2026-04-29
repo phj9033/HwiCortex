@@ -4,6 +4,117 @@ import type { Store } from "../store.js";
 import { getStoreCollections } from "../store.js";
 import { listWikiPages, parseFrontmatter } from "../wiki.js";
 
+// ============================================================================
+// Alert Detection
+// ============================================================================
+
+export type Alert = {
+  severity: "warn" | "info";
+  code: string;
+  message: string;
+  hint?: string;
+  items?: string[];
+};
+
+export function detectAlerts(store: Store, vaultDir: string): Alert[] {
+  const alerts: Alert[] = [];
+  const db = store.db;
+  const collections = getStoreCollections(db);
+
+  // 1. overlap (per pair) — flag when one path is a prefix of another
+  for (let i = 0; i < collections.length; i++) {
+    for (let j = i + 1; j < collections.length; j++) {
+      const a = collections[i].path;
+      const b = collections[j].path;
+      if (a === b || a.startsWith(b + "/") || b.startsWith(a + "/")) {
+        alerts.push({
+          severity: "warn",
+          code: "overlap",
+          message: `Collections '${collections[i].name}' and '${collections[j].name}' index overlapping paths`,
+          hint: `Consider 'hwicortex collection rm' on one of them`,
+        });
+      }
+    }
+  }
+
+  // 2. no-context (per collection) — flag collections with no context entries
+  for (const c of collections) {
+    const ctx = c.context as Record<string, string> | undefined;
+    if (!ctx || Object.keys(ctx).length === 0) {
+      alerts.push({
+        severity: "info",
+        code: "no-context",
+        message: `Collection '${c.name}' has no context — search ranking quality reduced`,
+        hint: `hwicortex context add qmd://${c.name}/ "<description>"`,
+      });
+    }
+  }
+
+  // 3. empty (per collection) — flag collections with zero active documents
+  for (const c of collections) {
+    const n = (
+      db
+        .prepare("SELECT COUNT(*) AS n FROM documents WHERE collection=? AND active=1")
+        .get(c.name) as { n: number }
+    ).n;
+    if (n === 0) {
+      alerts.push({
+        severity: "warn",
+        code: "empty",
+        message: `Collection '${c.name}' is empty — path may be wrong or files missing`,
+        hint: `Configured path: ${c.path}`,
+      });
+    }
+  }
+
+  // 4. no-embedding (aggregated) — active docs without content_vectors rows
+  // The content_vectors table always exists (created in initializeDatabase), so no guard needed.
+  const missing = (
+    db
+      .prepare(`
+        SELECT COUNT(DISTINCT d.id) AS n FROM documents d
+        WHERE d.active=1 AND NOT EXISTS (
+          SELECT 1 FROM content_vectors v WHERE v.hash = d.hash
+        )
+      `)
+      .get() as { n: number }
+  ).n;
+  if (missing > 0) {
+    alerts.push({
+      severity: "warn",
+      code: "no-embedding",
+      message: `${missing} document${missing === 1 ? "" : "s"} missing embeddings — vector search incomplete`,
+      hint: `hwicortex embed --collection <name>`,
+    });
+  }
+
+  // 5. stale (aggregated, items list slugs) — wiki pages never hit and older than 30 days
+  const wiki = listWikiPages(vaultDir);
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const staleItems = wiki
+    .filter(
+      (w) =>
+        (w.hit_count ?? 0) === 0 &&
+        typeof w.created === "string" &&
+        w.created.length > 0 &&
+        w.created < cutoff
+    )
+    .map(
+      (w) =>
+        `${w.project}/${basename(w.filePath).replace(/\.md$/, "").toLowerCase()}`
+    );
+  if (staleItems.length > 0) {
+    alerts.push({
+      severity: "info",
+      code: "stale",
+      message: `${staleItems.length} wiki page${staleItems.length === 1 ? "" : "s"} have never been hit (created >30d ago)`,
+      items: staleItems,
+    });
+  }
+
+  return alerts;
+}
+
 export type DashboardOptions = { port: number; open: boolean };
 
 export async function runDashboard(_opts: DashboardOptions): Promise<void> {
@@ -28,7 +139,7 @@ export type Overview = {
     totalWikiPages: number;
     lastUpdate: string | null;
   };
-  alerts: never[];
+  alerts: Alert[];
   collections: Array<{
     name: string;
     path: string;
@@ -92,6 +203,25 @@ export function getOverview(store: Store, vaultDir: string): Overview {
     };
   });
 
+  const alerts = detectAlerts(store, vaultDir);
+
+  // Populate overlapsWith on each collection card from overlap alerts
+  for (const card of collectionRows) {
+    const overlapPartners: string[] = [];
+    for (const alert of alerts) {
+      if (alert.code === "overlap") {
+        // Parse the two names out of the message pattern: "Collections 'A' and 'B' index overlapping paths"
+        const match = alert.message.match(/^Collections '(.+)' and '(.+)' index overlapping paths/);
+        if (match) {
+          const [, nameA, nameB] = match;
+          if (nameA === card.name) overlapPartners.push(nameB);
+          if (nameB === card.name) overlapPartners.push(nameA);
+        }
+      }
+    }
+    card.overlapsWith = overlapPartners;
+  }
+
   return {
     vault: {
       path: vaultDir,
@@ -100,7 +230,7 @@ export function getOverview(store: Store, vaultDir: string): Overview {
       totalWikiPages: wikiPages.length,
       lastUpdate,
     },
-    alerts: [],
+    alerts,
     collections: collectionRows,
     wiki: {
       recent: [...wikiMeta]
