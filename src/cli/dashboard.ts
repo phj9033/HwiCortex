@@ -62,7 +62,7 @@ export function getOverview(store: Store, vaultDir: string): Overview {
   const wikiMeta: WikiPageMeta[] = wikiPages.map((w) => ({
     title: w.title,
     project: w.project,
-    slug: basename(w.filePath).replace(/\.md$/, ""),
+    slug: basename(w.filePath).replace(/\.md$/, "").toLowerCase(),
     tags: w.tags ?? [],
     importance: w.importance ?? 0,
     hit_count: w.hit_count ?? 0,
