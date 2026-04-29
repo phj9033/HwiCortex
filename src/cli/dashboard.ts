@@ -301,11 +301,12 @@ export function getCollectionDetail(store: Store, name: string): CollectionDetai
     };
   });
 
+  const ctx = coll.context as Record<string, string> | undefined;
   return {
     name: coll.name,
     path: coll.path,
     pattern: coll.pattern ?? "**/*.md",
-    context: (coll.context as Record<string, string> | undefined)?.[""] ?? null,
+    context: ctx?.["/"] ?? ctx?.[""] ?? null,
     files,
   };
 }
@@ -415,7 +416,10 @@ export async function searchDashboard(
   // Escape embedded double-quotes and wrap as an FTS5 phrase query.
   const phrase = `"${trimmed.replace(/"/g, '""')}"`;
 
-  const raw = await searchFTS(store.db, phrase, limit + offset, collection);
+  // Fetch a generous pool to compute true total. 1000 is more than the dashboard
+  // will ever paginate through; if a query exceeds this, the count is capped (acceptable).
+  const POOL_LIMIT = 1000;
+  const raw = await searchFTS(store.db, phrase, POOL_LIMIT, collection);
   const sliced = raw.slice(offset, offset + limit);
 
   return {

@@ -34,6 +34,7 @@ export function writeWikiPage(
     ...Object.entries(meta).map(([k, v]) => {
       if (Array.isArray(v)) return `${k}: [${v.join(", ")}]`;
       if (typeof v === "number" || typeof v === "boolean") return `${k}: ${v}`;
+      if (typeof v === "string") return `${k}: ${v}`;  // unquoted — matches buildFrontmatter
       return `${k}: ${JSON.stringify(v)}`;
     }),
     "---",

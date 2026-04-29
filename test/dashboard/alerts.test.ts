@@ -2,8 +2,6 @@ import { describe, it, expect, afterEach } from "vitest";
 import { detectAlerts } from "../../src/cli/dashboard.js";
 import { makeTempStore, makeTempVault, writeWikiPage } from "./fixtures.js";
 import { upsertStoreCollection, insertContent, insertDocument } from "../../src/store.js";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
 
 describe("detectAlerts", () => {
   let cleanup: (() => void) | null = null;
@@ -107,31 +105,14 @@ describe("detectAlerts", () => {
     cleanup = c;
     const vault = makeTempVault();
 
-    // Write wiki pages directly (no JSON.stringify on date strings, matching wiki.ts buildFrontmatter format)
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const todayDate = new Date().toISOString().slice(0, 10);
 
-    function writeWikiDirect(vaultDir: string, project: string, slug: string, created: string): void {
-      const path = join(vaultDir, "wiki", project, `${slug}.md`);
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, [
-        "---",
-        `title: ${slug}`,
-        `project: ${project}`,
-        `tags: []`,
-        `hit_count: 0`,
-        `created: ${created}`,
-        "---",
-        "",
-        "body",
-      ].join("\n"));
-    }
-
     // Stale: hit_count=0 and created 60 days ago
-    writeWikiDirect(vault, "p1", "old-unread", sixtyDaysAgo);
+    writeWikiPage(vault, "p1", "Old Unread", "body", { tags: [], hit_count: 0, created: sixtyDaysAgo });
 
     // Recent: hit_count=0 but created today — should NOT trigger stale
-    writeWikiDirect(vault, "p1", "new-page", todayDate);
+    writeWikiPage(vault, "p1", "New Page", "body", { tags: [], hit_count: 0, created: todayDate });
 
     const alerts = detectAlerts(store, vault);
 
