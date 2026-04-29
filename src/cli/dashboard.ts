@@ -22,9 +22,9 @@ function detectOverlaps(collections: Array<{ name: string; path: string }>): Arr
   const pairs: Array<[string, string]> = [];
   for (let i = 0; i < collections.length; i++) {
     for (let j = i + 1; j < collections.length; j++) {
-      const a = collections[i].path, b = collections[j].path;
-      if (a === b || a.startsWith(b + "/") || b.startsWith(a + "/")) {
-        pairs.push([collections[i].name, collections[j].name]);
+      const a = collections[i]?.path ?? "", b = collections[j]?.path ?? "";
+      if (a && b && (a === b || a.startsWith(b + "/") || b.startsWith(a + "/"))) {
+        pairs.push([collections[i]?.name ?? "", collections[j]?.name ?? ""]);
       }
     }
   }
@@ -221,7 +221,7 @@ export async function startServer(opts: {
         return;
       }
       const cm = url.pathname.match(/^\/api\/collection\/([^/]+)$/);
-      if (cm) {
+      if (cm && cm[1]) {
         const name = decodeURIComponent(cm[1]);
         if (name.includes("..") || name.includes("/")) {
           sendText("Not found", 404);
@@ -236,7 +236,7 @@ export async function startServer(opts: {
         return;
       }
       const wm = url.pathname.match(/^\/api\/wiki\/([^/]+)\/([^/]+)$/);
-      if (wm) {
+      if (wm && wm[1] && wm[2]) {
         const project = decodeURIComponent(wm[1]);
         const slug = decodeURIComponent(wm[2]);
         if (
