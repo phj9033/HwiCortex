@@ -1,7 +1,7 @@
 import { basename, join } from "path";
 import { existsSync, readFileSync, statSync } from "fs";
 import type { Store } from "../store.js";
-import { getStoreCollections } from "../store.js";
+import { getStoreCollections, searchFTS } from "../store.js";
 import { listWikiPages, parseFrontmatter } from "../wiki.js";
 
 // ============================================================================
@@ -383,5 +383,50 @@ export function getWikiPageDetail(
     },
     body,
     backlinks,
+  };
+}
+
+// ============================================================================
+// FTS Search
+// ============================================================================
+
+export type SearchDashboardResult = {
+  query: string;
+  total: number;
+  results: Array<{
+    collection: string;
+    path: string;
+    title: string | null;
+    snippet: string;
+    score: number;
+  }>;
+};
+
+export async function searchDashboard(
+  store: Store,
+  q: string,
+  collection?: string,
+  limit = 20,
+  offset = 0,
+): Promise<SearchDashboardResult> {
+  const trimmed = q.trim();
+  if (trimmed.length === 0) return { query: q, total: 0, results: [] };
+
+  // Escape embedded double-quotes and wrap as an FTS5 phrase query.
+  const phrase = `"${trimmed.replace(/"/g, '""')}"`;
+
+  const raw = await searchFTS(store.db, phrase, limit + offset, collection);
+  const sliced = raw.slice(offset, offset + limit);
+
+  return {
+    query: q,
+    total: raw.length,
+    results: sliced.map(r => ({
+      collection: r.collectionName,
+      path: r.displayPath,
+      title: r.title ?? null,
+      snippet: r.body?.slice(0, 200) ?? "",
+      score: r.score,
+    })),
   };
 }
