@@ -2777,7 +2777,7 @@ function showHelp(): void {
   console.log("  hwicortex context add/list/rm                      - Attach human-written summaries");
   console.log("  hwicortex ls [collection[/path]]                   - Inspect indexed files");
   console.log("");
-Wiki (knowledge vault):");
+  console.log("Wiki (knowledge vault):");
   console.log("  hwicortex wiki create <title> --project <name> [--tags t1,t2] [--body text]");
   console.log("  hwicortex wiki update <title> --project <name> [--append text] [--body text]");
   console.log("  hwicortex wiki rm <title> --project <name>");
@@ -3172,6 +3172,10 @@ if (isMain) {
 
     case "dashboard": {
       const port = Number(cli.values.port ?? 7777);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        console.error(`Error: Invalid port "${cli.values.port}". Use a number between 1 and 65535.`);
+        process.exit(1);
+      }
       const open = cli.values["no-open"] !== true;
       const { runDashboard } = await import("./dashboard.js");
       await runDashboard({ port, open });

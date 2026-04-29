@@ -837,7 +837,7 @@ function renderTags() {
   view.innerHTML = "<p>Loading…</p>";
   fetchJson("/api/tags").then(function(data) {
     var tags = data.tags || [];
-    var html = "<h2 style='margin-bottom:12px'>Tags</h2>";
+    var html = "<h2 style='margin-bottom:12px'>Tags <small style='font-weight:normal;color:#666'>Click a tag to search for pages containing it</small></h2>";
     if (tags.length === 0) {
       html += "<p style='color:#666'>No tags found in wiki frontmatter.</p>";
     } else {
@@ -848,7 +848,7 @@ function renderTags() {
         var t = tags[i];
         var barW = Math.round(t.count * scale);
         html += '<div class="tag-row">';
-        html += '<a class="tag-name" onclick="location.hash=\'#search?q=tag:' + encodeURIComponent(t.name) + '\'">' + escHtml(t.name) + '</a>';
+        html += '<a class="tag-name" onclick="location.hash=\'#search?q=' + encodeURIComponent(t.name) + '\'">' + escHtml(t.name) + '</a>';
         html += '<div class="tag-bar" style="width:' + barW + 'px"></div>';
         html += '<span class="tag-count">' + escHtml(String(t.count)) + '</span>';
         html += '</div>';
