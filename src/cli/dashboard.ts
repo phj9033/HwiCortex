@@ -17,25 +17,32 @@ export type Alert = {
   items?: string[];
 };
 
+function detectOverlaps(collections: Array<{ name: string; path: string }>): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  for (let i = 0; i < collections.length; i++) {
+    for (let j = i + 1; j < collections.length; j++) {
+      const a = collections[i].path, b = collections[j].path;
+      if (a === b || a.startsWith(b + "/") || b.startsWith(a + "/")) {
+        pairs.push([collections[i].name, collections[j].name]);
+      }
+    }
+  }
+  return pairs;
+}
+
 export function detectAlerts(store: Store, vaultDir: string): Alert[] {
   const alerts: Alert[] = [];
   const db = store.db;
   const collections = getStoreCollections(db);
 
   // 1. overlap (per pair) — flag when one path is a prefix of another
-  for (let i = 0; i < collections.length; i++) {
-    for (let j = i + 1; j < collections.length; j++) {
-      const a = collections[i].path;
-      const b = collections[j].path;
-      if (a === b || a.startsWith(b + "/") || b.startsWith(a + "/")) {
-        alerts.push({
-          severity: "warn",
-          code: "overlap",
-          message: `Collections '${collections[i].name}' and '${collections[j].name}' index overlapping paths`,
-          hint: `Consider 'hwicortex collection rm' on one of them`,
-        });
-      }
-    }
+  for (const [nameA, nameB] of detectOverlaps(collections)) {
+    alerts.push({
+      severity: "warn",
+      code: "overlap",
+      message: `Collections '${nameA}' and '${nameB}' index overlapping paths`,
+      hint: `Consider 'hwicortex collection rm' on one of them`,
+    });
   }
 
   // 2. no-context (per collection) — flag collections with no context entries
@@ -165,8 +172,8 @@ export async function startServer(opts: {
       if (url.pathname === "/api/search") {
         const q = url.searchParams.get("q") ?? "";
         const coll = url.searchParams.get("collection") ?? undefined;
-        const limit = Number(url.searchParams.get("limit") ?? 20);
-        const offset = Number(url.searchParams.get("offset") ?? 0);
+        const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? 20) || 20));
+        const offset = Math.max(0, Number(url.searchParams.get("offset") ?? 0) || 0);
         sendJson(await searchDashboard(store, q, coll, limit, offset));
         return;
       }
@@ -213,9 +220,11 @@ export async function startServer(opts: {
   });
 
   await new Promise<void>((resolve, reject) => {
-    server.listen(port, "127.0.0.1", resolve);
+    server.listen(port, "127.0.0.1", () => resolve());
     server.once("error", reject);
   });
+  // Prevent post-startup 'error' events from crashing the process.
+  server.on("error", (err) => console.error("[dashboard] server error:", err));
 
   const actualPort = (server.address() as { port: number }).port;
 
@@ -313,19 +322,13 @@ export function getOverview(store: Store, vaultDir: string): Overview {
 
   const alerts = detectAlerts(store, vaultDir);
 
-  // Populate overlapsWith on each collection card from overlap alerts
+  // Populate overlapsWith on each collection card using detectOverlaps directly
+  const overlapPairs = detectOverlaps(collections);
   for (const card of collectionRows) {
     const overlapPartners: string[] = [];
-    for (const alert of alerts) {
-      if (alert.code === "overlap") {
-        // Parse the two names out of the message pattern: "Collections 'A' and 'B' index overlapping paths"
-        const match = alert.message.match(/^Collections '(.+)' and '(.+)' index overlapping paths/);
-        if (match) {
-          const [, nameA, nameB] = match;
-          if (nameA === card.name) overlapPartners.push(nameB);
-          if (nameB === card.name) overlapPartners.push(nameA);
-        }
-      }
+    for (const [nameA, nameB] of overlapPairs) {
+      if (nameA === card.name) overlapPartners.push(nameB);
+      if (nameB === card.name) overlapPartners.push(nameA);
     }
     card.overlapsWith = overlapPartners;
   }

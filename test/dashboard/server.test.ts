@@ -67,4 +67,12 @@ describe("HTTP routes", () => {
     const r = await fetch(baseUrl + "/api/overview");
     expect(r.status).toBe(200);
   });
+
+  it("clamps invalid limit/offset to safe defaults", async () => {
+    const r = await fetch(baseUrl + "/api/search?q=&limit=abc&offset=xyz");
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    // empty query → empty results regardless, but the route shouldn't 500
+    expect(body.results).toEqual([]);
+  });
 });
