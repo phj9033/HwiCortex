@@ -89,7 +89,7 @@ case "dashboard": {
 }
 ```
 
-Also register the flags `--port` (string→number) and `--no-open` (boolean) in the parser if not already present.
+Also register the flags in the existing `parseArgs` options object near the top of `qmd.ts` (search for `parseArgs` or `options:` to locate it). Add `port: { type: "string" }` and `"no-open": { type: "boolean" }` so `cli.values.port` and `cli.values["no-open"]` are populated. Without registering them, the values will be `undefined` regardless of CLI input.
 
 - [ ] **Step 5: Run test to verify it passes**
 
@@ -205,7 +205,11 @@ describe("getOverview", () => {
 Run: `npx vitest run test/dashboard/data.test.ts`
 Expected: FAIL — `getOverview` not exported.
 
-- [ ] **Step 3: Implement `getOverview()`**
+- [ ] **Step 3: Read `listWikiPages` return type before implementing**
+
+Open `src/wiki.ts:367` and inspect the returned object shape. Field names below (`w.meta.tags`, `w.slug`, `w.filename`) are best-guesses — replace with actual fields. Do this **before** writing the implementation to avoid a rewrite.
+
+- [ ] **Step 4: Implement `getOverview()`**
 
 In `dashboard.ts` (after the stub):
 
@@ -259,14 +263,12 @@ export function getOverview(store: Store, vaultDir: string): Overview {
 }
 ```
 
-Note the actual `listWikiPages` return shape may differ — adjust field accessors after reading `src/wiki.ts:367`.
-
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run test/dashboard/data.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/cli/dashboard.ts test/dashboard/data.test.ts
@@ -493,7 +495,7 @@ export function detectAlerts(store: Store, vaultDir: string): Alert[] {
   const wiki = listWikiPages(vaultDir);
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const staleItems = wiki
-    .filter(w => (w.meta.hit_count ?? 0) === 0 && (w.meta.created ?? "") < cutoff)
+    .filter(w => (w.meta.hit_count ?? 0) === 0 && typeof w.meta.created === "string" && w.meta.created < cutoff)
     .map(w => `${w.meta.project}/${w.slug ?? w.filename.replace(/\.md$/, "")}`);
   if (staleItems.length > 0) {
     alerts.push({
@@ -575,6 +577,7 @@ export async function searchDashboard(
   if (trimmed.length === 0) return { query: q, total: 0, results: [] };
 
   const phrase = `"${trimmed.replace(/"/g, '""')}"`;
+  // Note: read searchFTS signature in src/store.ts:3012 before this — return type and field names below are best-guesses
   const raw = await searchFTS(store.db, phrase, limit + offset, collection);
   const sliced = raw.slice(offset, offset + limit);
 
@@ -849,7 +852,7 @@ git commit -am "feat(dashboard): add search dropdown and results page"
 ```ts
 export async function runDashboard(opts: DashboardOptions): Promise<void> {
   const vaultDir = process.env.QMD_VAULT_DIR;
-  if (!vaultDir) { console.error("Error: QMD_VAULT_DIR not set. Set it or pass --vault <path>."); process.exit(1); }
+  if (!vaultDir) { console.error("Error: QMD_VAULT_DIR not set."); process.exit(1); }
   if (!existsSync(vaultDir)) { console.error(`Error: Vault path not found: ${vaultDir}`); process.exit(1); }
 
   let store: Store;
