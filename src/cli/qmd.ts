@@ -2575,6 +2575,9 @@ function parseCLI() {
       "add-source": { type: "string" },
       "vault-dir": { type: "string" },
       reset: { type: "boolean" },
+      // Dashboard options
+      port: { type: "string" },
+      "no-open": { type: "boolean" },
     },
     allowPositionals: true,
     strict: false, // Allow unknown options to pass through
@@ -3161,6 +3164,14 @@ if (isMain) {
           console.error("Run 'hwicortex collection help' for usage");
           process.exit(1);
       }
+      break;
+    }
+
+    case "dashboard": {
+      const port = Number(cli.values.port ?? 7777);
+      const open = cli.values["no-open"] !== true;
+      const { runDashboard } = await import("./dashboard.js");
+      await runDashboard({ port, open });
       break;
     }
 
