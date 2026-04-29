@@ -241,6 +241,7 @@ function renderHtml(): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HwiCortex Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -489,6 +490,36 @@ header {
 .alert-row summary::-webkit-details-marker { display: none; }
 .alert-hint { margin-top: 4px; margin-left: 4px; color: #555; font-size: 12px; }
 .alert-items { margin-top: 4px; margin-left: 4px; font-size: 12px; color: #555; }
+
+/* ---- Tags view ---- */
+.tag-list { margin-top: 8px; }
+.tag-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.tag-name { min-width: 120px; font-size: 13px; color: #1a56db; cursor: pointer; text-decoration: none; }
+.tag-name:hover { text-decoration: underline; }
+.tag-bar { height: 14px; background: #a8c4f8; border-radius: 3px; min-width: 2px; }
+.tag-count { font-size: 12px; color: #666; }
+
+/* ---- Collection detail ---- */
+.meta { font-size: 13px; color: #555; margin-bottom: 12px; }
+.file-list { width: 100%; border-collapse: collapse; font-size: 13px; }
+.file-list th { text-align: left; padding: 6px 10px; background: #f5f5f5;
+  border-bottom: 2px solid #e0e0e0; font-weight: 600; }
+.file-list td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; word-break: break-all; }
+.file-list tbody tr:hover { background: #f5f7ff; }
+
+/* ---- Wiki page detail ---- */
+.wiki-body { max-width: 720px; line-height: 1.7; font-size: 14px; margin-top: 12px; }
+.wiki-body h1,.wiki-body h2,.wiki-body h3 { margin: 1em 0 0.4em; }
+.wiki-body p { margin-bottom: 0.8em; }
+.wiki-body pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+.wiki-body code { font-size: 12px; }
+.backlinks { margin-top: 24px; padding: 12px 16px; background: #fafafa;
+  border: 1px solid #e8e8e8; border-radius: 6px; }
+.backlinks h3 { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #555; }
+.backlinks ul { list-style: none; font-size: 13px; }
+.backlinks li { padding: 2px 0; }
+.backlinks a { color: #1a56db; text-decoration: none; }
+.backlinks a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -752,16 +783,119 @@ function renderOverview() {
 }
 
 function renderTags() {
-  document.getElementById("view").innerHTML = "<p>Stub: Tags</p>";
+  var view = document.getElementById("view");
+  view.innerHTML = "<p>Loading…</p>";
+  fetchJson("/api/tags").then(function(data) {
+    var tags = data.tags || [];
+    var html = "<h2 style='margin-bottom:12px'>Tags</h2>";
+    if (tags.length === 0) {
+      html += "<p style='color:#666'>No tags found in wiki frontmatter.</p>";
+    } else {
+      var maxCount = Math.max.apply(null, tags.map(function(t) { return t.count; }));
+      var scale = 200 / Math.max(maxCount, 1);
+      html += '<div class="tag-list">';
+      for (var i = 0; i < tags.length; i++) {
+        var t = tags[i];
+        var barW = Math.round(t.count * scale);
+        html += '<div class="tag-row">';
+        html += '<a class="tag-name" onclick="location.hash=\'#search?q=tag:' + encodeURIComponent(t.name) + '\'">' + escHtml(t.name) + '</a>';
+        html += '<div class="tag-bar" style="width:' + barW + 'px"></div>';
+        html += '<span class="tag-count">' + escHtml(String(t.count)) + '</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    view.innerHTML = html;
+  }).catch(function(err) { renderError(err.message || String(err)); });
 }
 
 function renderCollection(name) {
-  document.getElementById("view").innerHTML = "<p>Stub: Collection " + escHtml(name || "") + "</p>";
+  var view = document.getElementById("view");
+  view.innerHTML = "<p>Loading…</p>";
+  fetchJson("/api/collection/" + encodeURIComponent(name)).then(function(data) {
+    if (data.error) {
+      view.innerHTML = '<div class="card"><p style="color:#c00">' + escHtml(data.error) + '</p>' +
+        '<a href="#overview" style="color:#1a56db;font-size:13px">← Back to Overview</a></div>';
+      return;
+    }
+    var html = '<h2 style="margin-bottom:10px"><a href="#overview" style="color:#1a56db;text-decoration:none">←</a> ' + escHtml(data.name || "") + '</h2>';
+    var ctx = data.context ? escHtml(data.context) : "(none)";
+    html += '<div class="meta">Path: ' + escHtml(data.path || "") +
+      ' &middot; Pattern: ' + escHtml(data.pattern || "") +
+      ' &middot; ' + escHtml(String((data.files || []).length)) + ' files' +
+      ' &middot; Context: ' + ctx + '</div>';
+    var files = data.files || [];
+    if (files.length === 0) {
+      html += '<div class="card"><p style="color:#666">Empty collection — no active files indexed.</p></div>';
+    } else {
+      html += '<table class="file-list"><thead><tr><th>Path</th><th>Title</th><th>Size</th><th>Modified</th></tr></thead><tbody>';
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var sizeKb = f.size ? (f.size / 1024).toFixed(1) + " KB" : "—";
+        var mod = f.modified ? relTime(f.modified) : "—";
+        // NOTE(v1): raw file content modal deferred — adding a click handler for file preview
+        // would require a new /api/file/:path endpoint; defer until requested (YAGNI).
+        html += '<tr><td>' + escHtml(f.path || "") + '</td><td>' + escHtml(f.title || "—") +
+          '</td><td>' + escHtml(sizeKb) + '</td><td>' + escHtml(mod) + '</td></tr>';
+      }
+      html += '</tbody></table>';
+    }
+    view.innerHTML = html;
+  }).catch(function(err) {
+    if (err.message && err.message.includes("404")) {
+      view.innerHTML = '<div class="card"><p style="color:#c00">Collection not found: ' + escHtml(name || "") + '</p>' +
+        '<a href="#overview" style="color:#1a56db;font-size:13px">← Back to Overview</a></div>';
+    } else {
+      renderError(err.message || String(err));
+    }
+  });
 }
 
 function renderWiki(project, slug) {
-  document.getElementById("view").innerHTML =
-    "<p>Stub: Wiki " + escHtml(project || "") + "/" + escHtml(slug || "") + "</p>";
+  var view = document.getElementById("view");
+  view.innerHTML = "<p>Loading…</p>";
+  fetchJson("/api/wiki/" + encodeURIComponent(project) + "/" + encodeURIComponent(slug)).then(function(data) {
+    if (data.error) {
+      view.innerHTML = '<div class="card"><p style="color:#c00">' + escHtml(data.error) + '</p>' +
+        '<a href="#overview" style="color:#1a56db;font-size:13px">← Back to Overview</a></div>';
+      return;
+    }
+    var m = data.meta || {};
+    var tagBadges = (m.tags || []).map(function(tg) {
+      return '<span class="badge badge-info">' + escHtml(tg) + '</span>';
+    }).join(" ");
+    var html = '<h2 style="margin-bottom:10px"><a href="#overview" style="color:#1a56db;text-decoration:none">←</a> ' + escHtml(m.title || slug) + '</h2>';
+    html += '<div class="meta">Project: ' + escHtml(m.project || project) +
+      ' &middot; Tags: ' + (tagBadges || '<span style="color:#999">none</span>') +
+      ' &middot; Importance: ' + escHtml(String(m.importance || 0)) +
+      ' &middot; Hits: ' + escHtml(String(m.hit_count || 0)) + '</div>';
+    html += '<article class="wiki-body" id="wiki-article"></article>';
+    var backlinks = data.backlinks || [];
+    html += '<aside class="backlinks"><h3>Backlinks (' + escHtml(String(backlinks.length)) + ')</h3><ul>';
+    if (backlinks.length === 0) {
+      html += '<li style="color:#999">No backlinks found.</li>';
+    } else {
+      for (var i = 0; i < backlinks.length; i++) {
+        var bl = backlinks[i];
+        html += '<li>← <a href="#wiki/' + encodeURIComponent(m.project || project) + '/' + encodeURIComponent(bl.slug) + '">' + escHtml(bl.title) + '</a></li>';
+      }
+    }
+    html += '</ul></aside>';
+    view.innerHTML = html;
+    var article = document.getElementById("wiki-article");
+    if (typeof window.marked !== "undefined") {
+      article.innerHTML = window.marked.parse(data.body || "");
+    } else {
+      article.innerHTML = "<pre>" + escHtml(data.body || "") + "</pre>";
+    }
+  }).catch(function(err) {
+    if (err.message && err.message.includes("404")) {
+      view.innerHTML = '<div class="card"><p style="color:#c00">Wiki page not found: ' + escHtml(project + "/" + slug) + '</p>' +
+        '<a href="#overview" style="color:#1a56db;font-size:13px">← Back to Overview</a></div>';
+    } else {
+      renderError(err.message || String(err));
+    }
+  });
 }
 
 function renderSearch(q, coll) {

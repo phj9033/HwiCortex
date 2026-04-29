@@ -94,4 +94,14 @@ describe("HTTP routes", () => {
     expect(body).toContain("Health Alerts");
     expect(body).toContain("/api/overview");
   });
+
+  it("HTML shell includes drill-down rendering helpers", async () => {
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    expect(body).toContain("renderTags");
+    expect(body).toContain("renderCollection");
+    expect(body).toContain("renderWiki");
+    expect(body).toContain("marked"); // CDN script
+    expect(body).toContain("backlinks");
+  });
 });
