@@ -578,10 +578,7 @@ header {
   .split-grid { grid-template-columns: 1fr; }
 }
 .coll-panel .coll-grid { grid-template-columns: 1fr; gap: 8px; }
-.wiki-panel .wiki-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
-@media (max-width: 700px) {
-  .wiki-panel .wiki-grid { grid-template-columns: 1fr; }
-}
+.wiki-panel .wiki-grid { margin-top: 12px; }
 .wiki-summary { color: #666; font-size: 13px; margin-bottom: 10px; }
 .wiki-subhead { font-size: 13px; font-weight: 600; color: #555; margin: 8px 0 4px; }
 .wiki-projects { list-style: none; padding: 0; margin: 0 0 12px; font-size: 13px; }
@@ -715,7 +712,7 @@ function relTime(iso) {
   return Math.floor(diff / 86400) + "d ago";
 }
 
-// ---- Render stubs (replaced by Tasks 10-12) --------------------------
+// ---- View renderers --------------------------------------------------
 function renderOverview() {
   var view = document.getElementById("view");
   view.innerHTML = "<p>Loading…</p>";
