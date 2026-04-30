@@ -586,6 +586,22 @@ header {
 .wiki-projects a { color: #1a56db; cursor: pointer; text-decoration: none; }
 .wiki-projects a:hover { text-decoration: underline; }
 .wiki-project-count { color: #999; font-size: 12px; }
+
+/* ---- Help tab ---- */
+.help-section { margin-bottom: 16px; }
+.help-section h2 { font-size: 18px; margin-bottom: 10px; }
+.help-section h3 { font-size: 14px; font-weight: 600; margin: 12px 0 6px; color: #444; }
+.help-section p  { margin-bottom: 8px; }
+.help-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+.help-table th, .help-table td { padding: 6px 8px; border: 1px solid #e0e0e0; text-align: left; vertical-align: top; }
+.help-table thead th { background: #fafafa; font-weight: 600; }
+.help-table tbody th { width: 80px; background: #fafafa; }
+.help-dl { margin: 4px 0; }
+.help-dl dt { font-weight: 600; margin-top: 8px; }
+.help-dl dd { margin: 2px 0 4px 16px; color: #444; }
+.help-pre { background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+.help-list { list-style: disc; padding-left: 20px; }
+.help-list li { margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -596,6 +612,7 @@ header {
     <nav class="tabs">
       <a href="#overview" class="tab" id="tab-overview">Overview</a>
       <a href="#tags" class="tab" id="tab-tags">Tags</a>
+      <a href="#help" class="tab" id="tab-help">Help</a>
     </nav>
     <div class="spacer"></div>
     <button class="btn-refresh" id="btn-refresh">Refresh</button>
@@ -658,6 +675,7 @@ function parseHash() {
 
   if (hash === "overview") return { view: "overview", params: {} };
   if (hash === "tags") return { view: "tags", params: {} };
+  if (hash === "help") return { view: "help", params: {} };
 
   const collMatch = hash.match(/^collection\\/(.+)$/);
   if (collMatch) return { view: "collection", params: { name: decodeURIComponent(collMatch[1]) } };
@@ -682,6 +700,7 @@ function setActiveTab(view) {
   document.querySelectorAll(".tab").forEach(function(el) { el.classList.remove("active"); });
   if (view === "overview") document.getElementById("tab-overview").classList.add("active");
   if (view === "tags")     document.getElementById("tab-tags").classList.add("active");
+  if (view === "help")     document.getElementById("tab-help").classList.add("active");
 }
 
 function route() {
@@ -690,6 +709,7 @@ function route() {
   try {
     if (view === "overview") { renderOverview(); return; }
     if (view === "tags")     { renderTags();    return; }
+    if (view === "help")     { renderHelp();    return; }
     if (view === "collection") { renderCollection(params.name); return; }
     if (view === "wiki")     { renderWiki(params.project, params.slug); return; }
     if (view === "search")   { renderSearch(params.q, params.collection, params.page || 0); return; }
@@ -897,6 +917,61 @@ function renderTags() {
     }
     view.innerHTML = html;
   }).catch(function(err) { renderError(err.message || String(err)); });
+}
+
+function renderHelp() {
+  var view = document.getElementById("view");
+  var html = '';
+
+  // Section 1: Collection vs Wiki
+  html += '<section class="card help-section">';
+  html += '<h2>Collection vs Wiki</h2>';
+  html += '<p>HwiCortex는 두 가지 형태의 문서 저장소를 다릅니다.</p>';
+  html += '<table class="help-table"><thead><tr><th></th><th>Collection</th><th>Wiki</th></tr></thead><tbody>';
+  html += '<tr><th>등록</th><td><code>hwicortex collection add &lt;path&gt;</code> 로 사용자가 직접 등록</td><td>볈트 디렉터리(<code>QMD_VAULT_DIR/wiki/</code>) 아래 파일이 자동 인덱싱됨</td></tr>';
+  html += '<tr><th>위치</th><td>임의의 경로 (<code>~/projects/foo</code> 등)</td><td>볈트 안 <code>wiki/&lt;project&gt;/</code></td></tr>';
+  html += '<tr><th>메타</th><td>YAML <code>context</code>로 콘렉션 단위 설명 추가</td><td>페이지 frontmatter (<code>title</code>, <code>tags</code>, <code>importance</code>, <code>hit_count</code> 등)</td></tr>';
+  html += '<tr><th>용도</th><td>외부 코드/문서 검색 인덱싱</td><td>대화형 지식\xb7노트 누적, 검색 시 자동 hit 카운트 업데이트</td></tr>';
+  html += '</tbody></table>';
+  html += '</section>';
+
+  // Section 2: Health Alerts
+  html += '<section class="card help-section">';
+  html += '<h2>Health Alerts</h2>';
+  html += '<p>Overview 상단에 표시되는 5가지 코드의 의미와 대응 명령:</p>';
+  html += '<dl class="help-dl">';
+  html += '<dt><code>overlap</code></dt><dd>두 콘렉션 경로가 한쪽이 다른 쪽의 prefix인 경우. 한쪽을 <code>hwicortex collection rm</code> 으로 정리하세요.</dd>';
+  html += '<dt><code>no-context</code></dt><dd>콘렉션에 콘텍스트 설명이 없어서 검색 랭킹 품질이 낙음. <code>hwicortex context add qmd://&lt;name&gt;/ "&lt;설명&gt;"</code></dd>';
+  html += '<dt><code>empty</code></dt><dd>콘렉션이 비었음 (경로 오타이거나 파일이 사라졌을 수 있음). 등록 경로를 확인하세요.</dd>';
+  html += '<dt><code>no-embedding</code></dt><dd>일부 문서에 임베딩이 없어서 벡터 검색이 누락됨. <code>hwicortex embed --collection &lt;name&gt;</code></dd>';
+  html += '<dt><code>stale</code></dt><dd>30일 넘게 한 번도 hit되지 않은 위키 페이지 목록. 정리 후보입니다.</dd>';
+  html += '</dl>';
+  html += '</section>';
+
+  // Section 3: CLI quick reference
+  html += '<section class="card help-section">';
+  html += '<h2>CLI 빠른 참조</h2>';
+  html += '<h3>Collection</h3>';
+  html += '<pre class="help-pre">hwicortex collection add &lt;path&gt;     # 콘렉션 등록\nhwicortex collection list             # 등록된 콘렉션 보기\nhwicortex collection rm &lt;name&gt;        # 제거</pre>';
+  html += '<h3>Wiki</h3>';
+  html += '<pre class="help-pre">hwicortex wiki create &lt;project&gt; &lt;title&gt;\nhwicortex wiki list [--project &lt;name&gt;]\nhwicortex wiki tag &lt;slug&gt; &lt;tag&gt;</pre>';
+  html += '<h3>Indexing &amp; Search</h3>';
+  html += '<pre class="help-pre">hwicortex update              # 변경 파일 재인덱싱\nhwicortex embed [--collection &lt;name&gt;]\nhwicortex search &lt;query&gt;\nhwicortex query &lt;query&gt;       # LLM 응답</pre>';
+  html += '</section>';
+
+  // Section 4: Dashboard usage
+  html += '<section class="card help-section">';
+  html += '<h2>대시보드 사용법</h2>';
+  html += '<ul class="help-list">';
+  html += '<li><strong>탭</strong>: Overview / Tags / Help. URL 해시(<code>#overview</code>)로 직접 이동 가능.</li>';
+  html += '<li><strong>검색바</strong>: 입력 시 200ms 디바운스 드롭다운 추천. Enter로 전체 결과 페이지로 이동.</li>';
+  html += '<li><strong>카드/태그 클릭</strong>: 해당 콘렉션/태그로 검색 필터링.</li>';
+  html += '<li><strong>Refresh 버튼</strong>: 현재 뷰만 다시 로드 (전체 새로고침 없이).</li>';
+  html += '<li><strong>키보드</strong>: ESC로 모달/드롭다운 닫기.</li>';
+  html += '</ul>';
+  html += '</section>';
+
+  view.innerHTML = html;
 }
 
 function renderCollection(name) {
