@@ -20,3 +20,27 @@ llm:
 
 ingest:
   collections: []
+
+research:
+  models:
+    card:  claude-haiku-4-5
+    synth: claude-sonnet-4-6
+    draft: claude-sonnet-4-6
+  search:
+    provider: brave
+    brave:
+      api_key: ${BRAVE_SEARCH_API_KEY}
+    tavily:
+      api_key: ${TAVILY_API_KEY}
+  fetch:
+    user_agent: "hwicortex-research/0.1"
+    rate_limit_per_domain_qps: 1
+    timeout_ms: 30000
+    max_redirects: 5
+  budget:
+    max_new_urls: 100
+    max_total_bytes: 50000000
+    max_llm_cost_usd: 0.50
+  draft:
+    default_top_k: 12
+    include_vault_default: false
