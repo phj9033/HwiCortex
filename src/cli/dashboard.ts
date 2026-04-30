@@ -1153,6 +1153,7 @@ export type Overview = {
     path: string;
     totalDocs: number;
     totalCollections: number;
+    totalWikiProjects: number;
     totalWikiPages: number;
     lastUpdate: string | null;
   };
@@ -1167,6 +1168,7 @@ export type Overview = {
     overlapsWith: string[];
   }>;
   wiki: {
+    projects: Array<{ name: string; pageCount: number }>;
     recent: WikiPageMeta[];
     topHits: WikiPageMeta[];
     highImportance: WikiPageMeta[];
@@ -1198,7 +1200,8 @@ export function getOverview(store: Store, vaultDir: string): Overview {
     updated: w.updated ?? "",
   }));
 
-  const collectionRows = collections.map((c) => {
+  const realCollections = collections.filter((c) => c.name !== "wiki");
+  const collectionRows = realCollections.map((c) => {
     const fileCount = (
       db
         .prepare("SELECT COUNT(*) AS n FROM documents WHERE collection=? AND active=1")
@@ -1233,17 +1236,27 @@ export function getOverview(store: Store, vaultDir: string): Overview {
     card.overlapsWith = overlapPartners;
   }
 
+  const projectCounts = new Map<string, number>();
+  for (const w of wikiPages) {
+    projectCounts.set(w.project, (projectCounts.get(w.project) ?? 0) + 1);
+  }
+  const wikiProjects = [...projectCounts.entries()]
+    .map(([name, pageCount]) => ({ name, pageCount }))
+    .sort((a, b) => b.pageCount - a.pageCount);
+
   return {
     vault: {
       path: vaultDir,
       totalDocs,
-      totalCollections: collections.length,
+      totalCollections: realCollections.length,
+      totalWikiProjects: projectCounts.size,
       totalWikiPages: wikiPages.length,
       lastUpdate,
     },
     alerts,
     collections: collectionRows,
     wiki: {
+      projects: wikiProjects,
       recent: [...wikiMeta]
         .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
         .slice(0, 5),
