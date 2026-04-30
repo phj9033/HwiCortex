@@ -129,6 +129,13 @@ test/research/
 - **Do not run `hwicortex`/`qmd` indexing commands during tests.** Tests stay hermetic.
 - **Commits**: per task. Use Conventional Commits (`feat:`, `test:`, `refactor:`). Sign-off line `Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>`.
 - **No new env vars besides the two secrets** (`ANTHROPIC_API_KEY`, `BRAVE_SEARCH_API_KEY` / `TAVILY_API_KEY`).
+- **ESM rule.** `package.json` declares `"type": "module"`, so `__dirname` and `__filename` are NOT defined. In test fixtures and any other place that needs a file-relative path, use:
+  ```ts
+  import { fileURLToPath } from "url";
+  import { dirname, join } from "path";
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  ```
+  Apply this in every test that does `join(__dirname, "../fixtures/...")`. The plan code blocks below assume this idiom is in scope; copy it into the test file.
 
 ---
 
@@ -143,7 +150,8 @@ test/research/
 
 ```bash
 bun add @mozilla/readability jsdom turndown rss-parser
-bun add -D msw @types/jsdom @types/turndown
+bun add -D msw @types/jsdom
+# turndown ships its own typings; only add @types/turndown if `bun run build` complains
 ```
 
 - [ ] **Step 2: Verify install**
@@ -1627,9 +1635,11 @@ import { htmlExtractor } from "../extractors/html.js";
 import { StagingStore } from "../store/staging.js";
 import { RunLog } from "../store/log.js";
 import { seedUrls } from "../sources/seed-urls.js";
-import { from_document as fromDocument } from "../sources/from-document.js";  // added in Phase E
+// Other source adapters (arxiv/rss/web-search/from-document) are imported and
+// registered in later phases — do NOT import them here in Phase C.
 import type { Discovery } from "../sources/types.js";
 import type { TopicSpec, SourceSpec } from "../topic/schema.js";
+import type { LlmClient } from "../llm/client.js";
 
 export type FetchOptions = {
   topic: TopicSpec;
@@ -1640,6 +1650,8 @@ export type FetchOptions = {
   cardsEnabled?: boolean;
   source?: SourceSpec["type"];
   dryRun?: boolean;
+  /** Test seam: inject a custom LLM client for cards. Unset = production Anthropic client. */
+  _llmClient?: LlmClient;
 };
 
 export type ResearchConfig = {
@@ -1750,14 +1762,7 @@ export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
 }
 ```
 
-NOTE: The `from-document` import here is forward-looking; remove the unused import line until Phase E adds the file. To keep the file compiling now, omit that import. Plan-level reminder: when arriving at Phase E, re-add it to the registry via the structure shown.
-
-Actually, to keep this task green, drop the `from-document` import for now:
-
-```ts
-// src/research/pipeline/fetch.ts (header)
-// (do NOT import from-document until Phase E)
-```
+In later phases the `REGISTRY` constant grows by adding more source adapters and (for `web-search`) becomes a function `makeRegistry(config)` resolved per call. The Phase C version intentionally only registers `seed-urls`; do not pre-import other source files yet.
 
 - [ ] **Step 2: Pipeline test (msw + temp vault)**
 
@@ -2645,6 +2650,7 @@ git commit -m "feat(research): add from-document source (seeds-only mode)"
 // src/research/llm/from-document-extract.ts
 import { z } from "zod";
 import type { LlmClient } from "./client.js";
+// (note: substring validation lives in card.ts and is reused by the pipeline)
 
 const Schema = z.array(z.object({
   url: z.string().url(),
@@ -2682,11 +2688,21 @@ In `pipeline/fetch.ts`, when `spec.type === "from-document" && spec.mode === "us
 - For each item, synthesize a synthetic `RawRecord`-like and a `Card`. Validate excerpts (substring against the document text). Write the card via `writeCard`.
 - Append a synthetic `RawRecord` to staging if `spec.refetch === false`, with `body_md = item.summary`. Otherwise, also enqueue the URL through normal fetch.
 
+Add these imports at the top of `pipeline/fetch.ts` (alongside existing imports added in Phase D):
+
+```ts
+import { readFileSync } from "fs";
+import { isAbsolute, join as joinPath } from "path";
+import { extractCardsFromDocument } from "../llm/from-document-extract.js";
+import { substringMatchesNormalized } from "../llm/card.js";
+import type { RawRecord } from "../core/types.js";
+```
+
 Implementation sketch (apply within the source loop, before the standard discovery iteration):
 
 ```ts
 if (spec.type === "from-document" && spec.mode === "use-as-cards") {
-  const docPath = isAbsolute(spec.path) ? spec.path : join(vault, spec.path);
+  const docPath = isAbsolute(spec.path) ? spec.path : joinPath(vault, spec.path);
   const docText = readFileSync(docPath, "utf-8");
   const llm = opts._llmClient ?? createAnthropicClient();
   const out = await extractCardsFromDocument(llm, docText, topic.cards.model);
@@ -3156,11 +3172,13 @@ export async function draft(opts: DraftOptions): Promise<DraftResult> {
       throw new Error("require_context: no RAG hits");
     }
 
+    // HybridQueryResult fields (verified in src/store.ts):
+    //   file, displayPath, title, body, bestChunk, bestChunkPos, score, context, docid
     const context = hits.map(h => ({
-      source_id: extractSourceId(h.path) ?? "",
-      title: h.title ?? h.path,
-      snippet: h.snippet ?? "",
-      path: h.path,
+      source_id: extractSourceId(h.displayPath ?? h.file) ?? "",
+      title: h.title || h.displayPath || h.file,
+      snippet: h.bestChunk || (h.body ? h.body.slice(0, 800) : ""),
+      path: h.displayPath ?? h.file,
     })).filter(c => c.source_id);
 
     const llm = opts._llmClient ?? createAnthropicClient();
@@ -3188,7 +3206,7 @@ function slugFromPrompt(p: string): string {
 }
 ```
 
-NOTE: The `HybridQueryResult` may not have `snippet` directly — adapt field names to match the actual return shape after reading `src/store.ts` types. Also the temporary `dbPath` for draft needs decision: use a per-topic db at `<vault>/research/_staging/<id>/draft-rag.sqlite` so we don't mutate the user's main index unexpectedly. Document this and pass through CLI.
+**`dbPath` decision**: use a per-topic database at `<vault>/research/_staging/<id>/draft-rag.sqlite` so this pipeline never mutates the user's main hwicortex index. The CLI computes the path from `--vault` + topic id; agent tool does the same. Document this in the CLI help.
 
 - [ ] **Step 2: CLI**
 
@@ -3209,7 +3227,7 @@ git commit -m "feat(research): add draft pipeline using hwicortex SDK for RAG co
 
 ## Phase H — Topic management CLI + import + status
 
-### Task H1: `topic new`, `topic list`, `topic show`
+### Task H1: `topic new`, `topic list`, `topic show` CLI commands
 
 **Files:**
 - Create: `src/research/topic/scaffold.ts`
@@ -3262,7 +3280,7 @@ git add src/research/topic/scaffold.ts src/cli/research.ts test/research/topic/s
 git commit -m "feat(research): add topic new/list/show CLI"
 ```
 
-### Task H2: `import` shortcut
+### Task H2: `import` CLI shortcut
 
 **Files:**
 - Modify: `src/cli/research.ts` (add `runImport`)
@@ -3281,20 +3299,101 @@ git add src/cli/research.ts test/research/cli/import.test.ts
 git commit -m "feat(research): add import CLI shortcut for from-document sources"
 ```
 
-### Task H3: `status`
+### Task H3: `pipeline/status.ts` — shared status reader
+
+**Files:**
+- Create: `src/research/pipeline/status.ts`
+- Test: `test/research/pipeline/status.test.ts`
+
+Extracted as its own module so both the CLI (`runStatus`) and the agent tool (`research_status`) call the same code path.
+
+- [ ] **Step 1: Implementation**
+
+```ts
+// src/research/pipeline/status.ts
+import { existsSync, readFileSync, readdirSync } from "fs";
+import { join } from "path";
+import { stagingDir, sourcesDir, notesDir, draftsDir } from "../topic/paths.js";
+
+export type TopicStatus = {
+  topic_id: string;
+  raw_records: number;
+  cards: number;
+  synthesis_notes: number;
+  drafts: number;
+  cost_usd: number;
+  last_event_ts: string | null;
+  recent_events: any[];
+};
+
+export function computeStatus(vault: string, topicId: string): TopicStatus {
+  const raw = countLines(join(stagingDir(vault, topicId), "raw.jsonl"));
+  const cards = countMd(sourcesDir(vault, topicId));
+  const notes = countMdExcludingSubdir(notesDir(vault, topicId), "sources");
+  const drafts = countMd(draftsDir(vault, topicId));
+
+  const log = join(stagingDir(vault, topicId), "run-log.jsonl");
+  const events: any[] = existsSync(log)
+    ? readFileSync(log, "utf-8").split("\n").filter(Boolean).map(l => safeJson(l)).filter(Boolean)
+    : [];
+  const cost_usd = events
+    .filter(e => typeof e?.cost_usd === "number")
+    .reduce((s, e) => s + e.cost_usd, 0);
+
+  return {
+    topic_id: topicId,
+    raw_records: raw,
+    cards,
+    synthesis_notes: notes,
+    drafts,
+    cost_usd,
+    last_event_ts: events.length ? events[events.length - 1].ts ?? null : null,
+    recent_events: events.slice(-10),
+  };
+}
+
+function countLines(path: string): number {
+  if (!existsSync(path)) return 0;
+  return readFileSync(path, "utf-8").split("\n").filter(Boolean).length;
+}
+function countMd(dir: string): number {
+  if (!existsSync(dir)) return 0;
+  return readdirSync(dir).filter(f => f.endsWith(".md")).length;
+}
+function countMdExcludingSubdir(dir: string, exclude: string): number {
+  if (!existsSync(dir)) return 0;
+  return readdirSync(dir, { withFileTypes: true })
+    .filter(d => d.isFile() && d.name.endsWith(".md") && d.name !== exclude)
+    .length;
+}
+function safeJson(s: string): any { try { return JSON.parse(s); } catch { return null; } }
+```
+
+- [ ] **Step 2: Test**
+
+Use a temp vault with hand-written raw.jsonl, sources/, notes/, drafts/, run-log.jsonl. Assert returned counts and `cost_usd` aggregation.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/research/pipeline/status.ts test/research/pipeline/status.test.ts
+git commit -m "feat(research): extract shared status reader for CLI and agent"
+```
+
+### Task H4: `runStatus` CLI command
 
 **Files:**
 - Modify: `src/cli/research.ts` (add `runStatus`)
 
 - [ ] **Step 1: Implementation**
 
-Reads `_staging/<id>/raw.jsonl` line count, `_staging/<id>/run-log.jsonl` last events, counts files in `notes/<id>/sources/` and `notes/<id>/*.md`, sums any `cost_usd` from synth/draft entries in run-log. Outputs JSON with `--json` or a human summary.
+`runStatus` accepts `<topic-id> [--json] [--vault]`. It calls `computeStatus(vault, topicId)` and prints either JSON or a human summary (`raw=N cards=N notes=N drafts=N cost=$X.XXXX last=...`).
 
 - [ ] **Step 2: Test, commit**
 
 ```bash
 git add src/cli/research.ts test/research/cli/status.test.ts
-git commit -m "feat(research): add status CLI for topic state summary"
+git commit -m "feat(research): add status CLI command using shared status reader"
 ```
 
 ---
@@ -3315,8 +3414,11 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { fetchTopic } from "../pipeline/fetch.js";
 import { synthesize } from "../pipeline/synthesize.js";
 import { draft } from "../pipeline/draft.js";
+import { computeStatus } from "../pipeline/status.js";
 import { loadTopic, adhocTopicFromPrompt } from "../topic/loader.js";
-import { scaffoldTopic, listTopicIds } from "../topic/scaffold.js";
+import { listTopicIds } from "../topic/scaffold.js";
+import { stagingDir } from "../topic/paths.js";
+import { join } from "path";
 
 export const researchTools: Anthropic.Tool[] = [
   {
@@ -3385,26 +3487,45 @@ export const researchTools: Anthropic.Tool[] = [
 export type AgentCtx = {
   vault: string;
   config: any;        // ResearchConfig
-  dbPath: string;     // for draft
+  /** Optional override for draft RAG db path. If omitted, uses
+   *  <vault>/research/_staging/<topic>/draft-rag.sqlite. */
+  dbPath?: string;
 };
 
 export async function executeResearchTool(name: string, input: any, ctx: AgentCtx): Promise<{ content: string }> {
   switch (name) {
     case "research_fetch": {
       const topic = await tryLoadTopic(input.topic_id, ctx.vault);
-      const r = await fetchTopic({ topic, vault: ctx.vault, config: ctx.config, ... });
+      const r = await fetchTopic({
+        topic,
+        vault: ctx.vault,
+        config: ctx.config,
+        refresh: input.refresh,
+        maxNew: input.max_new,
+        cardsEnabled: !input.no_cards,
+        source: input.source,
+        dryRun: input.dry_run,
+      });
       return { content: JSON.stringify(r) };
     }
     case "research_synthesize": {
       const topic = await loadTopic(input.topic_id, ctx.vault);
-      const r = await synthesize({ topic, vault: ctx.vault, config: ctx.config, subtopic: input.subtopic, refresh: input.refresh });
+      const r = await synthesize({
+        topic, vault: ctx.vault, config: ctx.config,
+        subtopic: input.subtopic, refresh: input.refresh,
+      });
       return { content: JSON.stringify(r) };
     }
     case "research_draft": {
       const topic = await loadTopic(input.topic_id, ctx.vault);
-      const r = await draft({ topic, vault: ctx.vault, prompt: input.prompt, slug: input.slug,
-        includeVault: input.include_vault, style: input.style, topK: input.top_k,
-        requireContext: input.require_context, model: ctx.config.models.draft, dbPath: ctx.dbPath });
+      const dbPath = ctx.dbPath ?? join(stagingDir(ctx.vault, topic.id), "draft-rag.sqlite");
+      const r = await draft({
+        topic, vault: ctx.vault,
+        prompt: input.prompt, slug: input.slug,
+        includeVault: input.include_vault, style: input.style,
+        topK: input.top_k, requireContext: input.require_context,
+        model: ctx.config.models.draft, dbPath,
+      });
       return { content: JSON.stringify(r) };
     }
     case "research_topic_show": {
@@ -3415,9 +3536,7 @@ export async function executeResearchTool(name: string, input: any, ctx: AgentCt
       return { content: JSON.stringify(listTopicIds(ctx.vault)) };
     }
     case "research_status": {
-      // Reuse the runStatus implementation by calling a JSON API
-      const status = await import("../pipeline/status.js"); // optional; or inline here
-      return { content: JSON.stringify(await status.computeStatus(ctx.vault, input.topic_id)) };
+      return { content: JSON.stringify(computeStatus(ctx.vault, input.topic_id)) };
     }
     default:
       throw new Error("unknown tool: " + name);
