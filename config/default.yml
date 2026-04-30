@@ -39,7 +39,7 @@ research:
     max_redirects: 5
   budget:
     max_new_urls: 100
-    max_total_bytes: 50000000
+    max_total_bytes: 50000000  # 50 MB — keep digits unseparated; YAML 1.2 parses 50_000_000 as a string
     max_llm_cost_usd: 0.50
   draft:
     default_top_k: 12
