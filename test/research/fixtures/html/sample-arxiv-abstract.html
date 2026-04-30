@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>[2512.01234] Reciprocal Rank Fusion for Heterogeneous Personal Corpora</title>
+  <meta name="date" content="2025-12-15">
+</head>
+<body>
+  <header>
+    <a href="/">arXiv.org</a>
+  </header>
+  <main>
+    <article>
+      <h1 class="title">Reciprocal Rank Fusion for Heterogeneous Personal Corpora</h1>
+      <p class="authors">A. Researcher, B. Coauthor, C. Lastauthor</p>
+      <p class="dateline">Submitted on 15 Dec 2025</p>
+
+      <section>
+        <h2>Abstract</h2>
+        <p>Personal-scale document collections present a challenging
+        environment for retrieval systems. Unlike web-scale corpora, where
+        average behavior dominates and outliers can be ignored, personal
+        corpora are dominated by long tails of idiosyncratic terminology,
+        meeting notes, code snippets, and casual writing. We argue that this
+        heterogeneity makes single-strategy retrieval — whether lexical or
+        dense — systematically worse than a fused approach that combines the
+        strengths of both.</p>
+
+        <p>In this paper we evaluate reciprocal rank fusion (RRF) as a
+        practical baseline for personal retrieval and compare it against
+        learned-fusion alternatives across a range of corpus sizes and
+        document distributions. We find that RRF is remarkably robust: it
+        matches or beats more sophisticated fusion methods on every corpus
+        we tested, while requiring no per-corpus training or hyperparameter
+        tuning. The simplicity is significant: it means an end-user product
+        can ship RRF with confidence, knowing that the user's corpus does
+        not have to look like the training distribution for retrieval to
+        work well.</p>
+
+        <p>We also study failure modes. The most consistent failure of RRF
+        on personal corpora occurs when both retrievers retrieve the same
+        wrong document near the top of their ranked lists, an effect we
+        call <em>correlated false positive</em>. We propose a simple
+        diversification step that detects this case using a learned
+        confidence score on the top-k overlap and falls back to a more
+        conservative ranking when correlation is high. This change adds
+        less than a millisecond of latency per query but eliminates the
+        majority of correlated-false-positive errors in our benchmark.</p>
+
+        <p>Our experiments use four publicly released personal-corpus
+        analogs spanning roughly 5,000 to 200,000 documents, and we report
+        NDCG@10, MRR, and a new "user-actionable" metric that measures how
+        often the ground-truth document appears in the top three results.
+        Across all four corpora, our diversified-RRF approach improves
+        user-actionable hits by between 6% and 11% relative to plain RRF,
+        with no statistically significant change in NDCG@10. We release the
+        code and the benchmark as supplementary material.</p>
+      </section>
+
+      <section>
+        <h2>1. Introduction</h2>
+        <p>Information retrieval at internet scale has been studied for
+        decades, but personal-scale retrieval — the problem of searching
+        one user's documents on one user's machine — has received much less
+        attention. Yet many emerging product categories, including
+        local-first knowledge tools and on-device AI assistants, depend
+        critically on solving this problem. The constraints are different
+        from those of web search in ways that matter for ranking design.</p>
+      </section>
+    </article>
+  </main>
+</body>
+</html>
