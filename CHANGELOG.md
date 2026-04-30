@@ -11,6 +11,12 @@
 
 ### Changes
 
+- **Dashboard split + Help**: `dashboard` Overview now renders real
+  Collections and the Wiki summary in side-by-side panels (the synthetic
+  `wiki` collection is hidden from the Collections panel and replaced
+  with a project-count list under Wiki). A new **Help** tab documents
+  the Collection-vs-Wiki distinction, the five Health Alert codes,
+  common CLI commands, and dashboard usage in Korean.
 - **Knowledge loop**: 4개의 스킬이 기존 hwicortex CLI를 조합하여 AI 대화에서 지식을 자동 추출·축적·검색하는 순환 루프를 구성한다.
 - **Wiki hit counting**: wiki pages referenced in search/query results
   automatically increment their `hit_count` for importance tracking.
