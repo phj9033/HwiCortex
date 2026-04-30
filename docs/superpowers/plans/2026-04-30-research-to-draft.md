@@ -2300,10 +2300,10 @@ it("writes a card via mock LLM and is idempotent on rerun", async () => {
   });
   const llm = mockLlm([JSON.stringify({ tldr: ["a","b","c"], excerpts: [], tags: ["rag"] })]);
   const cfg = /* ...same as earlier... */;
-  const r1 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm } as any);
+  const r1 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
   expect(r1.records_added).toBe(1);
   // 2nd run should not call the LLM (no fail because mock just no-ops)
-  const r2 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm } as any);
+  const r2 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
   expect(r2.records_added).toBe(0);
 });
 ```
@@ -3329,7 +3329,7 @@ export type TopicStatus = {
 export function computeStatus(vault: string, topicId: string): TopicStatus {
   const raw = countLines(join(stagingDir(vault, topicId), "raw.jsonl"));
   const cards = countMd(sourcesDir(vault, topicId));
-  const notes = countMdExcludingSubdir(notesDir(vault, topicId), "sources");
+  const notes = countMdShallow(notesDir(vault, topicId));
   const drafts = countMd(draftsDir(vault, topicId));
 
   const log = join(stagingDir(vault, topicId), "run-log.jsonl");
@@ -3360,10 +3360,10 @@ function countMd(dir: string): number {
   if (!existsSync(dir)) return 0;
   return readdirSync(dir).filter(f => f.endsWith(".md")).length;
 }
-function countMdExcludingSubdir(dir: string, exclude: string): number {
+function countMdShallow(dir: string): number {
   if (!existsSync(dir)) return 0;
   return readdirSync(dir, { withFileTypes: true })
-    .filter(d => d.isFile() && d.name.endsWith(".md") && d.name !== exclude)
+    .filter(d => d.isFile() && d.name.endsWith(".md"))
     .length;
 }
 function safeJson(s: string): any { try { return JSON.parse(s); } catch { return null; } }
