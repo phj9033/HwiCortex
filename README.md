@@ -108,6 +108,24 @@ hwicortex wiki show "인증 설계" --project myproject
 export QMD_VAULT_DIR=~/my-obsidian-vault
 ```
 
+## 대시보드
+
+브라우저에서 컬렉션·위키·검색을 한눈에 본다. 로컬 전용, 외부 통신 없음.
+
+```sh
+hwicortex dashboard                  # 기본 포트 7777, 브라우저 자동 오픈
+hwicortex dashboard --port 8080      # 포트 변경
+hwicortex dashboard --no-open        # 브라우저 자동 오픈 비활성화
+```
+
+`QMD_VAULT_DIR` 설정 필요 (위키와 동일).
+
+| 탭 | 내용 |
+|----|------|
+| **Overview** | 볼트 메타(컬렉션·위키 프로젝트·문서 수), 헬스 알림(겹침/컨텍스트 누락/임베딩 누락 등), 컬렉션 카드와 위키 요약(Recent / Top Hits / High Importance)을 좌우 패널로 |
+| **Tags** | 위키 페이지 태그 빈도. 클릭하면 해당 태그로 검색 |
+| **Help** | Collection vs Wiki 구분, 5가지 헬스 알림 코드, 자주 쓰는 CLI, 단축키 등 한국어 레퍼런스 |
+
 ## 지식 추출
 
 AI 세션에서 인사이트를 추출하여 볼트에 저장한다. 프로젝트 루트에 `hwicortex.yaml` 필요.
