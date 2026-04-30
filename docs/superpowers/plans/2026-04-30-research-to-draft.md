@@ -12,6 +12,21 @@
 
 ---
 
+## Progress
+
+_Last updated: 2026-04-30_
+
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (11 commits ahead of `main`)
+- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5)
+- **Resume from:** Phase D — Task D1 (Card prompt + parser, plan line ~2002)
+- **All research tests:** 49/49 PASS via `npx vitest run test/research/` (~720ms)
+- **Notes for next session:**
+  - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
+  - Two intentional plan deviations are documented in commit messages: `robots.ts` uses `fetch()` instead of `undici.request` (MSW compat + 5s timeout, exposes `_resetRobotsCacheForTests`); C2 uses synthesised article HTML fixtures instead of captured real-world pages.
+  - C5 wires `research` via early-dispatch in `qmd.ts` (before `parseCLI()`) so research-specific flags don't pollute the global parser.
+
+---
+
 ## File Structure
 
 ### New files (`src/research/`)
