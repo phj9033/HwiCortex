@@ -148,4 +148,23 @@ describe("HTTP routes", () => {
       expect(body).toContain(code);
     }
   });
+
+  it("inline <script> body parses as valid JavaScript", async () => {
+    // Regression guard: when JS string literals inside the renderHtml()
+    // template literal use a single backslash for `\n` or `\'`, the template
+    // literal collapses them to real newlines / apostrophes, producing
+    // multi-line single-quoted strings or prematurely-closed strings in the
+    // browser-side script. The whole <script> then fails to parse and the
+    // dashboard hangs at "Loading…". Use double-backslash (`\\n`, `\\'`) so
+    // the served JS contains the escape sequence the browser needs.
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    const m = body.match(/<script>([\s\S]*?)<\/script>/g);
+    expect(m).toBeTruthy();
+    // The first <script> is the marked.min.js external loader (empty body);
+    // the inline dashboard JS is the next one with substantive content.
+    const inline = m!.map(s => s.replace(/^<script[^>]*>|<\/script>$/g, "")).find(s => s.length > 1000);
+    expect(inline).toBeTruthy();
+    expect(() => new Function(inline!)).not.toThrow();
+  });
 });

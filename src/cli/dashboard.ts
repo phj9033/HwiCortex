@@ -793,7 +793,7 @@ function renderOverview() {
       html += '<div class="card"><h2 style="margin-bottom:10px">Welcome to HwiCortex Dashboard</h2>';
       html += '<p style="margin-bottom:8px">No collections or wiki pages found. Get started:</p>';
       html += '<pre style="background:#f5f5f5;padding:10px;border-radius:6px;font-size:13px">';
-      html += 'hwicortex collection add &lt;path&gt;\nhwicortex embed --collection &lt;name&gt;\nhwicortex wiki create &lt;project&gt; &lt;title&gt;</pre></div>';
+      html += 'hwicortex collection add &lt;path&gt;\\nhwicortex embed --collection &lt;name&gt;\\nhwicortex wiki create &lt;title&gt; --project &lt;name&gt;</pre></div>';
     } else {
       html += '<div class="split-grid">';
 
@@ -833,7 +833,7 @@ function renderOverview() {
         html += '<h3 class="wiki-subhead">Projects</h3><ul class="wiki-projects">';
         for (var pi = 0; pi < projects.length; pi++) {
           var p = projects[pi];
-          html += '<li><a onclick="location.hash=\'#search?q=' + encodeURIComponent(p.name) + '\'">' + escHtml(p.name) + '</a> <span class="wiki-project-count">(' + escHtml(String(p.pageCount)) + ')</span></li>';
+          html += '<li><a onclick="location.hash=\\'#search?q=' + encodeURIComponent(p.name) + '\\'">' + escHtml(p.name) + '</a> <span class="wiki-project-count">(' + escHtml(String(p.pageCount)) + ')</span></li>';
         }
         html += '</ul>';
       }
@@ -847,7 +847,7 @@ function renderOverview() {
       } else {
         for (var ri = 0; ri < recent.length; ri++) {
           var rw = recent[ri];
-          html += '<li><a onclick="location.hash=\'#wiki/' + encodeURIComponent(rw.project || "") + '/' + encodeURIComponent(rw.slug || "") + '\'">' + escHtml(rw.title || rw.slug || "") + '</a></li>';
+          html += '<li><a onclick="location.hash=\\'#wiki/' + encodeURIComponent(rw.project || "") + '/' + encodeURIComponent(rw.slug || "") + '\\'">' + escHtml(rw.title || rw.slug || "") + '</a></li>';
         }
       }
       html += '</ul></div>';
@@ -858,7 +858,7 @@ function renderOverview() {
       } else {
         for (var ti = 0; ti < topHits.length; ti++) {
           var tw = topHits[ti];
-          html += '<li>' + (ti + 1) + '. <a onclick="location.hash=\'#wiki/' + encodeURIComponent(tw.project || "") + '/' + encodeURIComponent(tw.slug || "") + '\'">' + escHtml(tw.title || tw.slug || "") + '</a> (' + escHtml(String(tw.hit_count || 0)) + ')</li>';
+          html += '<li>' + (ti + 1) + '. <a onclick="location.hash=\\'#wiki/' + encodeURIComponent(tw.project || "") + '/' + encodeURIComponent(tw.slug || "") + '\\'">' + escHtml(tw.title || tw.slug || "") + '</a> (' + escHtml(String(tw.hit_count || 0)) + ')</li>';
         }
       }
       html += '</ul></div>';
@@ -869,7 +869,7 @@ function renderOverview() {
       } else {
         for (var ii = 0; ii < highImp.length; ii++) {
           var iw = highImp[ii];
-          html += '<li>&#9733; <a onclick="location.hash=\'#wiki/' + encodeURIComponent(iw.project || "") + '/' + encodeURIComponent(iw.slug || "") + '\'">' + escHtml(iw.title || iw.slug || "") + '</a></li>';
+          html += '<li>&#9733; <a onclick="location.hash=\\'#wiki/' + encodeURIComponent(iw.project || "") + '/' + encodeURIComponent(iw.slug || "") + '\\'">' + escHtml(iw.title || iw.slug || "") + '</a></li>';
         }
       }
       html += '</ul></div>';
@@ -908,7 +908,7 @@ function renderTags() {
         var t = tags[i];
         var barW = Math.round(t.count * scale);
         html += '<div class="tag-row">';
-        html += '<a class="tag-name" onclick="location.hash=\'#search?q=' + encodeURIComponent(t.name) + '\'">' + escHtml(t.name) + '</a>';
+        html += '<a class="tag-name" onclick="location.hash=\\'#search?q=' + encodeURIComponent(t.name) + '\\'">' + escHtml(t.name) + '</a>';
         html += '<div class="tag-bar" style="width:' + barW + 'px"></div>';
         html += '<span class="tag-count">' + escHtml(String(t.count)) + '</span>';
         html += '</div>';
@@ -952,11 +952,11 @@ function renderHelp() {
   html += '<section class="card help-section">';
   html += '<h2>CLI 빠른 참조</h2>';
   html += '<h3>Collection</h3>';
-  html += '<pre class="help-pre">hwicortex collection add &lt;path&gt;     # 컬렉션 등록\nhwicortex collection list             # 등록된 컬렉션 보기\nhwicortex collection rm &lt;name&gt;        # 제거</pre>';
+  html += '<pre class="help-pre">hwicortex collection add &lt;path&gt;     # 컬렉션 등록\\nhwicortex collection list             # 등록된 컬렉션 보기\\nhwicortex collection rm &lt;name&gt;        # 제거</pre>';
   html += '<h3>Wiki</h3>';
-  html += '<pre class="help-pre">hwicortex wiki create &lt;title&gt; --project &lt;name&gt; [--tags t1,t2]\nhwicortex wiki list [--project &lt;name&gt;] [--tag &lt;tag&gt;]\nhwicortex wiki show &lt;title&gt; --project &lt;name&gt;</pre>';
+  html += '<pre class="help-pre">hwicortex wiki create &lt;title&gt; --project &lt;name&gt; [--tags t1,t2]\\nhwicortex wiki list [--project &lt;name&gt;] [--tag &lt;tag&gt;]\\nhwicortex wiki show &lt;title&gt; --project &lt;name&gt;</pre>';
   html += '<h3>Indexing &amp; Search</h3>';
-  html += '<pre class="help-pre">hwicortex update              # 변경 파일 재인덱싱\nhwicortex embed [--collection &lt;name&gt;]\nhwicortex search &lt;query&gt;\nhwicortex query &lt;query&gt;       # LLM 응답</pre>';
+  html += '<pre class="help-pre">hwicortex update              # 변경 파일 재인덱싱\\nhwicortex embed [--collection &lt;name&gt;]\\nhwicortex search &lt;query&gt;\\nhwicortex query &lt;query&gt;       # LLM 응답</pre>';
   html += '</section>';
 
   // Section 4: Dashboard usage
