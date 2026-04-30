@@ -25,6 +25,10 @@
 
 - Fix wiki project extraction in search/query hit counting.
 - Fix notebook environment setup failures.
+- `collection rm` now cleans DB-only orphan rows in `store_collections` that
+  have no matching YAML entry (e.g., left behind by wiki indexing against a
+  temp vault). Previously such orphans were unreachable via the CLI because
+  the YAML lookup gated the DB cleanup.
 
 ## [2.1.0] - 2026-04-05
 

@@ -28,6 +28,7 @@ import {
   clearAllEmbeddings,
   insertEmbedding,
   getStatus,
+  getStoreCollections,
   hashContent,
   extractTitle,
   formatDocForEmbedding,
@@ -1455,21 +1456,30 @@ async function collectionAdd(pwd: string, globPattern: string, name?: string): P
 }
 
 function collectionRemove(name: string): void {
-  // Check if collection exists in YAML
+  // Look in both YAML config and the store_collections table.
+  // A "DB-only orphan" can occur when e.g. wiki indexing registers a collection
+  // against a temp vault dir that's later deleted, leaving behind a row in
+  // store_collections with no corresponding YAML entry. We must still be able
+  // to clean those up.
   const coll = getCollectionFromYaml(name);
-  if (!coll) {
+  const db = getDb();
+  const inDb = getStoreCollections(db).some((c) => c.name === name);
+
+  if (!coll && !inDb) {
+    closeDb();
     console.error(`${c.yellow}Collection not found: ${name}${c.reset}`);
     console.error(`Run 'hwicortex collection list' to see available collections.`);
     process.exit(1);
   }
 
-  const db = getDb();
   const result = removeCollection(db, name);
-  // Also remove from YAML config
-  yamlRemoveCollectionFn(name);
+  if (coll) yamlRemoveCollectionFn(name);
   closeDb();
 
   console.log(`${c.green}✓${c.reset} Removed collection '${name}'`);
+  if (!coll) {
+    console.log(`  (orphan row in store_collections; YAML had no entry)`);
+  }
   console.log(`  Deleted ${result.deletedDocs} documents`);
   if (result.cleanedHashes > 0) {
     console.log(`  Cleaned up ${result.cleanedHashes} orphaned content hashes`);

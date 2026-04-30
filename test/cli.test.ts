@@ -912,6 +912,30 @@ describe("CLI Collection Commands", () => {
     expect(stderr).toContain("Collection not found");
   });
 
+  test("removes a DB-only orphan collection (row in store_collections without YAML entry)", async () => {
+    // Simulate an orphan left behind by e.g. wiki indexing against a now-deleted vault:
+    // a row in store_collections that has no corresponding YAML entry.
+    const { openDatabase } = await import("../src/db.ts");
+    const { upsertStoreCollection } = await import("../src/store.ts");
+    const db = openDatabase(localDbPath);
+    upsertStoreCollection(db, "orphan-coll", { path: "/nonexistent/path", type: "static" });
+    db.close();
+
+    const { stdout, exitCode } = await runQmd(
+      ["collection", "remove", "orphan-coll"],
+      { dbPath: localDbPath },
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Removed collection 'orphan-coll'");
+
+    // Verify the row is gone from store_collections
+    const { openDatabase: openDb2 } = await import("../src/db.ts");
+    const verify = openDb2(localDbPath);
+    const rows = verify.prepare("SELECT name FROM store_collections WHERE name = ?").all("orphan-coll") as Array<{ name: string }>;
+    verify.close();
+    expect(rows).toHaveLength(0);
+  });
+
   test("handles missing remove argument", async () => {
     const { stderr, exitCode } = await runQmd(["collection", "remove"], { dbPath: localDbPath });
     expect(exitCode).toBe(1);
