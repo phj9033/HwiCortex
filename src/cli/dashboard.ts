@@ -1237,7 +1237,7 @@ export function getOverview(store: Store, vaultDir: string): Overview {
   }
 
   const projectCounts = new Map<string, number>();
-  for (const w of wikiPages) {
+  for (const w of wikiMeta) {
     projectCounts.set(w.project, (projectCounts.get(w.project) ?? 0) + 1);
   }
   const wikiProjects = [...projectCounts.entries()]
