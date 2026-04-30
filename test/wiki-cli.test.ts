@@ -1,29 +1,52 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { execSync } from "child_process";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { tmpdir } from "os";
 import { fileURLToPath } from "url";
 
 const PROJECT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Per-test isolation: tests must not pollute the developer's
+// ~/.cache/qmd/index.sqlite via ensureWikiCollection() (see src/wiki.ts:250).
+// beforeEach sets these to per-test temp paths.
+let activeIndexPath = "";
+let activeConfigDir = "";
+
 function qmd(args: string, vaultDir: string): string {
   return execSync(
     `bun src/cli/qmd.ts ${args}`,
     {
       cwd: PROJECT_DIR,
-      env: { ...process.env, QMD_VAULT_DIR: vaultDir },
+      env: {
+        ...process.env,
+        QMD_VAULT_DIR: vaultDir,
+        INDEX_PATH: activeIndexPath,
+        QMD_CONFIG_DIR: activeConfigDir,
+      },
       encoding: "utf-8",
       timeout: 10000,
     }
   ).trim();
 }
 
+function makeIsolated(prefix: string): { vaultDir: string; indexPath: string; configDir: string } {
+  const vaultDir = mkdtempSync(join(tmpdir(), `${prefix}-`));
+  const indexPath = join(vaultDir, "index.sqlite");
+  const configDir = join(vaultDir, "config");
+  execSync(`mkdir -p ${JSON.stringify(configDir)}`);
+  writeFileSync(join(configDir, "index.yml"), "collections: {}\n");
+  return { vaultDir, indexPath, configDir };
+}
+
 describe("qmd wiki CLI", () => {
   let vaultDir: string;
 
   beforeEach(() => {
-    vaultDir = mkdtempSync(join(tmpdir(), "wiki-cli-"));
+    const env = makeIsolated("wiki-cli");
+    vaultDir = env.vaultDir;
+    activeIndexPath = env.indexPath;
+    activeConfigDir = env.configDir;
   });
 
   afterEach(() => {
@@ -77,7 +100,10 @@ describe("qmd wiki end-to-end", () => {
   let vaultDir: string;
 
   beforeEach(() => {
-    vaultDir = mkdtempSync(join(tmpdir(), "wiki-e2e-"));
+    const env = makeIsolated("wiki-e2e");
+    vaultDir = env.vaultDir;
+    activeIndexPath = env.indexPath;
+    activeConfigDir = env.configDir;
   });
 
   afterEach(() => {

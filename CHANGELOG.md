@@ -29,6 +29,9 @@
   have no matching YAML entry (e.g., left behind by wiki indexing against a
   temp vault). Previously such orphans were unreachable via the CLI because
   the YAML lookup gated the DB cleanup.
+- Wiki CLI tests (`test/wiki-cli.test.ts`) now run with isolated `INDEX_PATH`
+  and `QMD_CONFIG_DIR` so `ensureWikiCollection()` does not pollute the
+  developer's `~/.cache/qmd/index.sqlite` during test runs.
 
 ## [2.1.0] - 2026-04-05
 
