@@ -6,21 +6,46 @@ describe("getOverview", () => {
   let cleanup: (() => void) | null = null;
   afterEach(() => { cleanup?.(); cleanup = null; });
 
-  it("returns vault counters and wiki activity", () => {
+  it("returns vault counters and wiki activity", async () => {
     const { store, cleanup: c } = makeTempStore();
     cleanup = c;
     const vault = makeTempVault();
     writeWikiPage(vault, "p1", "Page A", "body", { tags: ["x"], importance: 6, hit_count: 10 });
     writeWikiPage(vault, "p1", "Page B", "body", { tags: ["y"], importance: 1, hit_count: 0 });
+    writeWikiPage(vault, "p2", "Page C", "body", { tags: ["z"], importance: 0, hit_count: 0 });
+
+    // Register two collections directly in the DB:
+    //  - "wiki": synthetic, normally created by ensureWikiCollection()
+    //  - "bb3specs": a real user collection
+    const { upsertStoreCollection } = await import("../../src/store.js");
+    upsertStoreCollection(store.db, "wiki", { path: vault, type: "static" });
+    upsertStoreCollection(store.db, "bb3specs", { path: "/some/real/path", type: "static" });
 
     const result = getOverview(store, vault);
 
     expect(result.vault.path).toBe(vault);
-    expect(result.vault.totalWikiPages).toBe(2);
+    expect(result.vault.totalWikiPages).toBe(3);
+
+    // The synthetic "wiki" collection must NOT appear in the Collections panel.
+    expect(result.collections.find(c => c.name === "wiki")).toBeUndefined();
+    expect(result.collections.find(c => c.name === "bb3specs")).toBeDefined();
+
+    // totalCollections counts only real collections (excludes "wiki").
+    expect(result.vault.totalCollections).toBe(1);
+
+    // totalWikiProjects = distinct project subdirs across wiki pages.
+    expect(result.vault.totalWikiProjects).toBe(2);
+
+    // wiki.projects aggregated, sorted by descending pageCount.
+    expect(result.wiki.projects).toEqual([
+      { name: "p1", pageCount: 2 },
+      { name: "p2", pageCount: 1 },
+    ]);
+
+    // Existing assertions still hold.
     expect(result.wiki.recent.length).toBeGreaterThan(0);
     expect(result.wiki.topHits[0].hit_count).toBe(10);
     expect(result.wiki.highImportance.some(p => p.title === "Page A")).toBe(true);
-    expect(result.alerts).toEqual([]); // alerts come in Task 6
   });
 });
 
