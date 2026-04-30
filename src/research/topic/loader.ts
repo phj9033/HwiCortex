@@ -28,5 +28,6 @@ function slugify(s: string): string {
     .replace(/[^\p{Letter}\p{Number}]+/gu, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40)
+    .replace(/^-+|-+$/g, "")
     .replace(/[^a-z0-9-]/g, "x") || "topic";
 }

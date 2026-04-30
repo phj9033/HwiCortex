@@ -39,4 +39,11 @@ describe("adhocTopicFromPrompt", () => {
   it("is deterministic for same input", () => {
     expect(adhocTopicFromPrompt("foo bar").id).toBe(adhocTopicFromPrompt("foo bar").id);
   });
+
+  it("does not produce double-dashes when slug truncates on a separator", () => {
+    // 39 a's + space at position 40 → first slug pass: "aaaa…aaa-" (40 chars).
+    // The post-slice trailing-dash strip should remove the dash before the hash suffix.
+    const id = adhocTopicFromPrompt("a".repeat(39) + " end").id;
+    expect(id).not.toMatch(/--/);
+  });
 });
