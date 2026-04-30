@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, readFileSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, readFileSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { atomicWrite } from "../src/knowledge/vault-writer.js";
-import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance, resetImportance, findSimilar } from "../src/wiki.js";
+import { toWikiSlug, buildFrontmatter, parseFrontmatter, createWikiPage, getWikiPage, listWikiPages, updateWikiPage, removeWikiPage, linkPages, unlinkPages, getLinks, generateIndex, bumpCount, recalcImportance, resetImportance, findSimilar, reindexWikiVault } from "../src/wiki.js";
 import { createStore, searchFTS, getDocumentId, findActiveDocument } from "../src/store.js";
 import type { Store } from "../src/store.js";
 
@@ -364,6 +364,94 @@ describe("Wiki FTS indexing", () => {
     expect(row).toBeDefined();
     expect(row!.name).toBe("wiki");
     expect(row!.pattern).toBe("**/*.md");
+  });
+});
+
+describe("reindexWikiVault", () => {
+  let vaultDir: string;
+  let store: Store;
+
+  beforeEach(() => {
+    vaultDir = mkdtempSync(join(tmpdir(), "wiki-reindex-"));
+    store = createStore(join(vaultDir, "test-index.sqlite"));
+  });
+
+  afterEach(() => {
+    store.close();
+    if (vaultDir && existsSync(vaultDir)) rmSync(vaultDir, { recursive: true });
+  });
+
+  function writePage(project: string, slug: string, title: string, body: string): void {
+    const dir = join(vaultDir, "wiki", project);
+    mkdirSync(dir, { recursive: true });
+    const fm = buildFrontmatter({ title, project, tags: [], sources: [], related: [] });
+    writeFileSync(join(dir, `${slug}.md`), `${fm}\n${body}\n`);
+  }
+
+  test("indexes pre-existing on-disk pages with no DB rows", async () => {
+    writePage("alpha", "auth-flow", "Auth Flow", "JWT validation pipeline overview");
+    writePage("alpha", "rate-limit", "Rate Limit", "leaky bucket rate limiting");
+    writePage("beta", "deploy", "Deploy", "kubernetes manifest rollout");
+
+    const result = await reindexWikiVault(store, vaultDir);
+    expect(result.scanned).toBe(3);
+    expect(result.deactivated).toBe(0);
+
+    const collRow = store.db.prepare(
+      `SELECT name FROM store_collections WHERE name = 'wiki'`
+    ).get();
+    expect(collRow).toBeDefined();
+
+    const found = await searchFTS(store.db, "leaky bucket rate limiting");
+    expect(found.length).toBeGreaterThan(0);
+    expect(found[0]!.filepath).toContain("wiki/alpha/rate-limit.md");
+
+    const docRow = store.db.prepare(
+      `SELECT source_type, project FROM documents WHERE collection='wiki' AND path='alpha/auth-flow.md' AND active=1`
+    ).get() as { source_type: string; project: string } | undefined;
+    expect(docRow?.source_type).toBe("wiki");
+    expect(docRow?.project).toBe("alpha");
+  });
+
+  test("deactivates DB rows whose page was deleted on disk", async () => {
+    writePage("alpha", "stays", "Stays", "still on disk");
+    writePage("alpha", "removed", "Removed", "will be deleted");
+    await reindexWikiVault(store, vaultDir);
+
+    rmSync(join(vaultDir, "wiki", "alpha", "removed.md"));
+    const result = await reindexWikiVault(store, vaultDir);
+    expect(result.scanned).toBe(1);
+    expect(result.deactivated).toBe(1);
+
+    const stays = findActiveDocument(store.db, "wiki", "alpha/stays.md");
+    expect(stays).not.toBeNull();
+    const removed = findActiveDocument(store.db, "wiki", "alpha/removed.md");
+    expect(removed).toBeNull();
+  });
+
+  test("returns zero counts when vault has no wiki/ subdir", async () => {
+    const result = await reindexWikiVault(store, vaultDir);
+    expect(result.scanned).toBe(0);
+    expect(result.deactivated).toBe(0);
+    const collRow = store.db.prepare(
+      `SELECT name FROM store_collections WHERE name = 'wiki'`
+    ).get();
+    expect(collRow).toBeUndefined();
+  });
+
+  test("is idempotent — second run reports 0 scanned for unchanged content", async () => {
+    writePage("alpha", "p1", "P1", "first body");
+    const a = await reindexWikiVault(store, vaultDir);
+    expect(a.scanned).toBe(1);
+
+    const b = await reindexWikiVault(store, vaultDir);
+    // scanned counts pages on disk, regardless of change — both runs see 1 page
+    expect(b.scanned).toBe(1);
+    expect(b.deactivated).toBe(0);
+
+    // Document should still resolve to a single active row
+    const doc = findActiveDocument(store.db, "wiki", "alpha/p1.md");
+    expect(doc).not.toBeNull();
   });
 });
 

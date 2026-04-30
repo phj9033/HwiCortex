@@ -126,7 +126,7 @@ function getConfigDir(): string {
   return join(homedir(), ".config", "qmd");
 }
 
-function getConfigFilePath(): string {
+export function getConfigFilePath(): string {
   return join(getConfigDir(), `${currentIndexName}.yml`);
 }
 

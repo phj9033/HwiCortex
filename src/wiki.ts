@@ -8,7 +8,7 @@ import { join, basename } from "path";
 import { createHash } from "crypto";
 import { atomicWrite } from "./knowledge/vault-writer.js";
 import type { Store } from "./store.js";
-import { insertDocument, insertContent, getDocumentId, upsertFTS, deactivateDocument, upsertStoreCollection, searchFTS } from "./store.js";
+import { insertDocument, insertContent, getDocumentId, upsertFTS, deactivateDocument, upsertStoreCollection, searchFTS, getActiveDocumentPaths } from "./store.js";
 
 // ============================================================================
 // Slug generation
@@ -296,6 +296,44 @@ async function indexWikiPage(
 function deindexWikiPage(store: Store, project: string, filename: string): void {
   const docPath = `${project}/${filename}`;
   deactivateDocument(store.db, WIKI_COLLECTION, docPath);
+}
+
+/**
+ * Scan the entire wiki vault and (re)index every page on disk.
+ * Registers the "wiki" collection (idempotent) and reconciles documents
+ * table with disk: pages no longer present are deactivated.
+ *
+ * Used by `hwicortex update` so users do not need to manually run
+ * `collection add` for the wiki vault on a fresh environment.
+ */
+export async function reindexWikiVault(
+  store: Store,
+  vaultDir: string,
+): Promise<{ scanned: number; deactivated: number }> {
+  const wikiDir = join(vaultDir, "wiki");
+  if (!existsSync(wikiDir)) return { scanned: 0, deactivated: 0 };
+
+  ensureWikiCollection(store, vaultDir);
+
+  const pages = listWikiPages(vaultDir);
+  const seenDocPaths = new Set<string>();
+
+  for (const page of pages) {
+    const filename = basename(page.filePath);
+    const docPath = `${page.project}/${filename}`;
+    seenDocPaths.add(docPath);
+    const content = readFileSync(page.filePath, "utf-8");
+    await indexWikiPage(store, page.project, filename, page.title, content);
+  }
+
+  let deactivated = 0;
+  for (const docPath of getActiveDocumentPaths(store.db, WIKI_COLLECTION)) {
+    if (seenDocPaths.has(docPath)) continue;
+    deactivateDocument(store.db, WIKI_COLLECTION, docPath);
+    deactivated++;
+  }
+
+  return { scanned: pages.length, deactivated };
 }
 
 // ============================================================================

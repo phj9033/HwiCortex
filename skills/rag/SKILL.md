@@ -22,6 +22,8 @@ HwiCortex 컬렉션에서 관련 문서를 검색하여 작성(write), 평가(re
 /rag write "보상 루프 설계, game-method"
 /rag review ~/projects/my-game/combat.md -c game-method
 /rag search "밸런싱 DPS 곡선" -c game-method
+/rag write "전투+밸런싱 통합안" -c game-method -c game-balance   # 다중 컬렉션
+/rag search "보안 정책"                                         # -c 생략 → 전체 컬렉션 검색
 ```
 
 ### 모드 감지
@@ -34,9 +36,10 @@ HwiCortex 컬렉션에서 관련 문서를 검색하여 작성(write), 평가(re
 
 ### 컬렉션 감지
 
-1. `-c <name>` 플래그가 있으면 사용 (확실).
+1. `-c <name>` 플래그가 있으면 사용 (확실). **반복 지정 가능**: `-c colA -c colB` 로 여러 컬렉션 동시 검색.
 2. 없으면 `hwicortex collection list` 결과와 텍스트를 대조하여 매칭 (best-effort).
-3. 둘 다 없으면 전체 컬렉션 검색.
+   - 텍스트에 여러 컬렉션이 언급되면 매칭된 모든 컬렉션을 각각 `-c` 로 전달.
+3. 둘 다 없으면 `-c` 생략 → **전체 컬렉션 자동 검색** (CLI 기본 동작).
 
 컬렉션 검증은 공통 검색 파이프라인 Step 2에서 수행. 여기서는 파싱만 한다.
 
@@ -63,8 +66,8 @@ hwicortex collection list
 주제별로 하이브리드 검색 수행:
 
 ```bash
-# 1차: 스니펫으로 관련도 탐색
-hwicortex query "<주제>" -c <collection> --json -n 5
+# 1차: 스니펫으로 관련도 탐색 (-c 는 반복 지정으로 여러 컬렉션 가능, 생략 시 전체)
+hwicortex query "<주제>" -c <collection> [-c <collection2> ...] --json -n 5
 
 # 모호한 키워드는 --intent로 맥락 좁히기
 hwicortex query "밸런싱" -c <collection> --intent "전투 수치 DPS" --json -n 5

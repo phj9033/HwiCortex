@@ -104,6 +104,7 @@ import {
   listAllContexts,
   setConfigIndexName,
   loadConfig,
+  getConfigFilePath,
 } from "../collections.js";
 import { getEmbeddedQmdSkillContent, getEmbeddedQmdSkillFiles } from "../embedded-skills.js";
 import { handleIngest } from "./ingest.js";
@@ -111,7 +112,7 @@ import { handleExtract } from "./extract.js";
 import { handleWatch } from "./watch.js";
 import { handleRebuild } from "./rebuild.js";
 import { handleWiki } from "./wiki.js";
-import { bumpCount } from "../wiki.js";
+import { bumpCount, reindexWikiVault } from "../wiki.js";
 
 // Enable production mode - allows using default database path
 // Tests must set INDEX_PATH or use createStore() with explicit path
@@ -550,6 +551,20 @@ async function updateCollections(): Promise<void> {
   // Clear Ollama cache on update
   clearCache(db);
 
+  // Auto-index wiki vault if present. ensureWikiCollection() inside the helper
+  // upserts the "wiki" row in store_collections, so users don't need to run
+  // `collection add` against $QMD_VAULT_DIR/wiki on a fresh environment.
+  const vaultDir = process.env.QMD_VAULT_DIR;
+  if (vaultDir && existsSync(pathJoin(vaultDir, "wiki"))) {
+    console.log(`${c.bold}Indexing wiki vault${c.reset} ${c.dim}(${pathJoin(vaultDir, "wiki")})${c.reset}`);
+    try {
+      const wikiResult = await reindexWikiVault(storeInstance, vaultDir);
+      console.log(`Wiki: ${wikiResult.scanned} page(s) indexed, ${wikiResult.deactivated} deactivated\n`);
+    } catch (err) {
+      console.log(`${c.yellow}✗ Wiki indexing failed: ${err instanceof Error ? err.message : String(err)}${c.reset}\n`);
+    }
+  }
+
   const collections = listCollections(db);
 
   if (collections.length === 0) {
@@ -563,6 +578,13 @@ async function updateCollections(): Promise<void> {
   for (let i = 0; i < collections.length; i++) {
     const col = collections[i];
     if (!col) continue;
+    // Wiki was already handled by reindexWikiVault() with proper source_type
+    // and project metadata. Skipping prevents reindexCollection() from
+    // overwriting that metadata with the generic source_type="docs".
+    if (col.name === "wiki") {
+      console.log(`${c.cyan}[${i + 1}/${collections.length}]${c.reset} ${c.bold}${col.name}${c.reset} ${c.dim}(handled by wiki vault scan; skipped)${c.reset}\n`);
+      continue;
+    }
     console.log(`${c.cyan}[${i + 1}/${collections.length}]${c.reset} ${c.bold}${col.name}${c.reset} ${c.dim}(${col.glob_pattern})${c.reset}`);
 
     // Execute custom update command if specified in YAML
@@ -2141,17 +2163,25 @@ function outputResults(results: OutputRow[], query: string, opts: OutputOptions)
 
 // Resolve -c collection filter: supports single string, array, or undefined.
 // Returns validated collection names (exits on unknown collection).
+//
+// Recognises DB-only collections (e.g., the auto-registered "wiki" populated
+// by reindexWikiVault) on top of YAML-defined ones, so users don't see
+// "Collection not found: wiki" after `update` auto-indexes the vault.
 function resolveCollectionFilter(raw: string | string[] | undefined, useDefaults: boolean = false): string[] {
-  // If no filter specified and useDefaults is true, use default collections
   if (!raw && useDefaults) {
-    return getDefaultCollectionNames();
+    const yamlNames = getDefaultCollectionNames();
+    const dbOnly = getStoreCollections(getDb())
+      .map(c => c.name)
+      .filter(name => !yamlNames.includes(name));
+    return [...yamlNames, ...dbOnly];
   }
   if (!raw) return [];
   const names = Array.isArray(raw) ? raw : [raw];
   const validated: string[] = [];
+  const dbCollectionNames = new Set(getStoreCollections(getDb()).map(c => c.name));
   for (const name of names) {
-    const coll = getCollectionFromYaml(name);
-    if (!coll) {
+    const yamlColl = getCollectionFromYaml(name);
+    if (!yamlColl && !dbCollectionNames.has(name)) {
       console.error(`Collection not found: ${name}`);
       closeDb();
       process.exit(1);
@@ -3366,11 +3396,15 @@ if (isMain) {
 
     case "cleanup": {
       if (cli.values.reset) {
-        // Full database reset — delete and recreate
+        // Full reset — delete the database AND the YAML config so the next
+        // `update` starts from a truly empty state. (Without removing YAML,
+        // syncConfigToDb would re-register every previously-added collection
+        // on the very next CLI invocation.)
         const dbPath = getDbPath();
+        const configPath = getConfigFilePath();
         if (!cli.values.yes) {
           const rl = createInterface({ input: process.stdin, output: process.stdout });
-          const answer = await rl.question(`${c.yellow}This will delete the entire database at ${dbPath}. Continue? [y/N] ${c.reset}`);
+          const answer = await rl.question(`${c.yellow}This will delete the database at ${dbPath} and the config at ${configPath}. Continue? [y/N] ${c.reset}`);
           rl.close();
           if (answer.toLowerCase() !== "y") {
             console.log("Aborted.");
@@ -3382,7 +3416,15 @@ if (isMain) {
         try { unlinkSync(dbPath + "-wal"); } catch {}
         try { unlinkSync(dbPath + "-shm"); } catch {}
         console.log(`${c.green}✓${c.reset} Database deleted: ${dbPath}`);
-        console.log(`${c.dim}Run 'hwicortex update --embed' to rebuild.${c.reset}`);
+        try {
+          unlinkSync(configPath);
+          console.log(`${c.green}✓${c.reset} Config deleted: ${configPath}`);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+            console.log(`${c.yellow}Could not delete config (${configPath}): ${(err as Error).message}${c.reset}`);
+          }
+        }
+        console.log(`${c.dim}Run 'hwicortex collection add ...' then 'hwicortex update --embed' to rebuild.${c.reset}`);
         break;
       }
 
