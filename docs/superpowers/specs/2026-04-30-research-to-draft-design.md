@@ -260,6 +260,7 @@ published: 2024-01-15
 fetched: 2026-04-30
 language: en
 tags: [rag, evaluation, faithfulness]     # ≤ 8
+body_hash: "<sha256 of source RawRecord.body_md>"  # idempotence key
 hwicortex_index: true
 ---
 
@@ -375,6 +376,7 @@ hwicortex research
 │   --include-vault                      # broaden RAG to whole vault (default = topic only)
 │   --style blog|report|qa
 │   --top-k <N>
+│   --require-context                    # exit 1 if RAG returns 0 hits (default = warn + proceed)
 │   --model claude-sonnet-4-6
 │
 ├── import <id> <doc-path>               # stage 1 shortcut from a doc
