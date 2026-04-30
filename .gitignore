@@ -20,3 +20,4 @@ finetune/outputs/
 finetune/data/train/
 .claude/
 .idea/
+.worktrees/
