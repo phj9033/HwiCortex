@@ -931,7 +931,7 @@ function renderHelp() {
   html += '<tr><th>등록</th><td><code>hwicortex collection add &lt;path&gt;</code> 로 사용자가 직접 등록</td><td>볼트 디렉터리(<code>QMD_VAULT_DIR/wiki/</code>) 아래 파일이 자동 인덱싱됨</td></tr>';
   html += '<tr><th>위치</th><td>임의의 경로 (<code>~/projects/foo</code> 등)</td><td>볼트 안 <code>wiki/&lt;project&gt;/</code></td></tr>';
   html += '<tr><th>메타</th><td>YAML <code>context</code>로 컬렉션 단위 설명 추가</td><td>페이지 frontmatter (<code>title</code>, <code>tags</code>, <code>importance</code>, <code>hit_count</code> 등)</td></tr>';
-  html += '<tr><th>용도</th><td>외부 코드/문서 검색 인덱싱</td><td>대화형 지식\xb7노트 누적, 검색 시 자동 hit 카운트 업데이트</td></tr>';
+  html += '<tr><th>용도</th><td>외부 코드/문서 검색 인덱싱</td><td>대화형 지식&middot;노트 누적, 검색 시 자동 hit 카운트 업데이트</td></tr>';
   html += '</tbody></table>';
   html += '</section>';
 

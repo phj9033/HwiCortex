@@ -687,7 +687,7 @@ function renderHelp() {
   html += '<h3>Collection</h3>';
   html += '<pre class="help-pre">hwicortex collection add &lt;path&gt;     # 컬렉션 등록\nhwicortex collection list             # 등록된 컬렉션 보기\nhwicortex collection rm &lt;name&gt;        # 제거</pre>';
   html += '<h3>Wiki</h3>';
-  html += '<pre class="help-pre">hwicortex wiki create &lt;project&gt; &lt;title&gt;\nhwicortex wiki list [--project &lt;name&gt;]\nhwicortex wiki tag &lt;slug&gt; &lt;tag&gt;</pre>';
+  html += '<pre class="help-pre">hwicortex wiki create &lt;title&gt; --project &lt;name&gt; [--tags t1,t2]\nhwicortex wiki list [--project &lt;name&gt;] [--tag &lt;tag&gt;]\nhwicortex wiki show &lt;title&gt; --project &lt;name&gt;</pre>';
   html += '<h3>Indexing &amp; Search</h3>';
   html += '<pre class="help-pre">hwicortex update              # 변경 파일 재인덱싱\nhwicortex embed [--collection &lt;name&gt;]\nhwicortex search &lt;query&gt;\nhwicortex query &lt;query&gt;       # LLM 응답</pre>';
   html += '</section>';
