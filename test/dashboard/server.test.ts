@@ -120,4 +120,32 @@ describe("HTTP routes", () => {
     const body = await r.json();
     expect(body.results).toEqual([]);
   });
+
+  it("HTML shell includes split Overview layout markers", async () => {
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    // Two-panel layout class
+    expect(body).toContain("split-grid");
+    // Wiki panel summary copy
+    expect(body).toContain("wiki project");
+    // Vault header now mentions "wiki projects" not just "wiki pages"
+    expect(body).toContain("wiki projects");
+  });
+
+  it("HTML shell includes Help tab and Help content sections", async () => {
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    // Tab and route
+    expect(body).toContain('id="tab-help"');
+    expect(body).toContain('href="#help"');
+    expect(body).toContain('renderHelp');
+    // Korean section headings (hardcoded copy)
+    expect(body).toContain('Collection vs Wiki');
+    expect(body).toContain('Health Alerts');
+    expect(body).toContain('CLI');
+    // 5 alert codes are documented somewhere in the Help body
+    for (const code of ['overlap', 'no-context', 'empty', 'no-embedding', 'stale']) {
+      expect(body).toContain(code);
+    }
+  });
 });

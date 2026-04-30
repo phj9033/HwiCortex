@@ -566,6 +566,42 @@ header {
 .backlinks li { padding: 2px 0; }
 .backlinks a { color: #1a56db; text-decoration: none; }
 .backlinks a:hover { text-decoration: underline; }
+
+/* ---- Split Overview layout ---- */
+.split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (max-width: 900px) {
+  .split-grid { grid-template-columns: 1fr; }
+}
+.coll-panel .coll-grid { grid-template-columns: 1fr; gap: 8px; }
+.wiki-panel .wiki-grid { margin-top: 12px; }
+.wiki-summary { color: #666; font-size: 13px; margin-bottom: 10px; }
+.wiki-subhead { font-size: 13px; font-weight: 600; color: #555; margin: 8px 0 4px; }
+.wiki-projects { list-style: none; padding: 0; margin: 0 0 12px; font-size: 13px; }
+.wiki-projects li { padding: 2px 0; }
+.wiki-projects a { color: #1a56db; cursor: pointer; text-decoration: none; }
+.wiki-projects a:hover { text-decoration: underline; }
+.wiki-project-count { color: #999; font-size: 12px; }
+
+/* ---- Help tab ---- */
+.help-section { margin-bottom: 16px; }
+.help-section h2 { font-size: 18px; margin-bottom: 10px; }
+.help-section h3 { font-size: 14px; font-weight: 600; margin: 12px 0 6px; color: #444; }
+.help-section p  { margin-bottom: 8px; }
+.help-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+.help-table th, .help-table td { padding: 6px 8px; border: 1px solid #e0e0e0; text-align: left; vertical-align: top; }
+.help-table thead th { background: #fafafa; font-weight: 600; }
+.help-table tbody th { width: 80px; background: #fafafa; }
+.help-dl { margin: 4px 0; }
+.help-dl dt { font-weight: 600; margin-top: 8px; }
+.help-dl dd { margin: 2px 0 4px 16px; color: #444; }
+.help-pre { background: #f5f5f5; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto; }
+.help-list { list-style: disc; padding-left: 20px; }
+.help-list li { margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -576,6 +612,7 @@ header {
     <nav class="tabs">
       <a href="#overview" class="tab" id="tab-overview">Overview</a>
       <a href="#tags" class="tab" id="tab-tags">Tags</a>
+      <a href="#help" class="tab" id="tab-help">Help</a>
     </nav>
     <div class="spacer"></div>
     <button class="btn-refresh" id="btn-refresh">Refresh</button>
@@ -638,6 +675,7 @@ function parseHash() {
 
   if (hash === "overview") return { view: "overview", params: {} };
   if (hash === "tags") return { view: "tags", params: {} };
+  if (hash === "help") return { view: "help", params: {} };
 
   const collMatch = hash.match(/^collection\\/(.+)$/);
   if (collMatch) return { view: "collection", params: { name: decodeURIComponent(collMatch[1]) } };
@@ -662,6 +700,7 @@ function setActiveTab(view) {
   document.querySelectorAll(".tab").forEach(function(el) { el.classList.remove("active"); });
   if (view === "overview") document.getElementById("tab-overview").classList.add("active");
   if (view === "tags")     document.getElementById("tab-tags").classList.add("active");
+  if (view === "help")     document.getElementById("tab-help").classList.add("active");
 }
 
 function route() {
@@ -670,6 +709,7 @@ function route() {
   try {
     if (view === "overview") { renderOverview(); return; }
     if (view === "tags")     { renderTags();    return; }
+    if (view === "help")     { renderHelp();    return; }
     if (view === "collection") { renderCollection(params.name); return; }
     if (view === "wiki")     { renderWiki(params.project, params.slug); return; }
     if (view === "search")   { renderSearch(params.q, params.collection, params.page || 0); return; }
@@ -692,7 +732,7 @@ function relTime(iso) {
   return Math.floor(diff / 86400) + "d ago";
 }
 
-// ---- Render stubs (replaced by Tasks 10-12) --------------------------
+// ---- View renderers --------------------------------------------------
 function renderOverview() {
   var view = document.getElementById("view");
   view.innerHTML = "<p>Loading…</p>";
@@ -705,8 +745,9 @@ function renderOverview() {
     html += '<h2>HwiCortex Vault: ' + escHtml(v.path || "") + '</h2>';
     html += '<div class="vault-meta">';
     html += escHtml(String(v.totalCollections || 0)) + " collection" + (v.totalCollections === 1 ? "" : "s") + " &middot; ";
-    html += escHtml(String(v.totalDocs || 0)) + " doc" + (v.totalDocs === 1 ? "" : "s") + " &middot; ";
+    html += escHtml(String(v.totalWikiProjects || 0)) + " " + (v.totalWikiProjects === 1 ? "wiki project" : "wiki projects") + " &middot; ";
     html += escHtml(String(v.totalWikiPages || 0)) + " wiki page" + (v.totalWikiPages === 1 ? "" : "s") + " &middot; ";
+    html += escHtml(String(v.totalDocs || 0)) + " doc" + (v.totalDocs === 1 ? "" : "s") + " &middot; ";
     html += "Last updated " + escHtml(relTime(v.lastUpdate));
     html += "</div></div>";
 
@@ -737,50 +778,69 @@ function renderOverview() {
       html += '</div>';
     }
 
-    // Widget B — Collection Cards
+    // Widget B/C — Two-panel Collections | Wiki layout
     var colls = data.collections || [];
-    if (colls.length === 0) {
-      html += '<div class="card"><p>No collections yet. Run <code>hwicortex collection add &lt;path&gt;</code></p></div>';
-    } else {
-      html += '<div class="coll-grid">';
-      for (var ci = 0; ci < colls.length; ci++) {
-        var c = colls[ci];
-        var hasOverlap = c.overlapsWith && c.overlapsWith.length > 0;
-        html += '<div class="coll-card" data-coll="' + escHtml(c.name || "") + '">';
-        html += '<div class="coll-card-name">' + escHtml(c.name || "");
-        if (hasOverlap) html += ' <span title="Overlapping paths">&#9888;</span>';
-        html += '</div>';
-        html += '<div class="coll-card-meta">' + escHtml(String(c.fileCount || 0)) + " files &middot; " + escHtml(relTime(c.lastUpdate)) + '</div>';
-        html += '<span class="badge ' + (c.hasContext ? "badge-ctx" : "badge-noctx") + '">' + (c.hasContext ? "ctx" : "no context") + '</span>';
-        if (hasOverlap) {
-          html += '<div class="coll-card-overlap">overlaps with: ' + escHtml(c.overlapsWith.join(", ")) + '</div>';
-        }
-        html += '</div>';
-      }
-      html += '</div>';
-    }
-
-    // Widget C — Wiki Activity
     var wiki = data.wiki || {};
+    var projects = wiki.projects || [];
     var recent = wiki.recent || [];
     var topHits = wiki.topHits || [];
     var highImp = wiki.highImportance || [];
 
-    var noWiki = recent.length === 0 && topHits.length === 0 && highImp.length === 0;
+    var noWiki = recent.length === 0 && topHits.length === 0 && highImp.length === 0 && projects.length === 0;
     var noColls = colls.length === 0;
 
-    if (noWiki && noColls) {
-      // Replace the collection empty-state with a combined welcome
-      html = '<div class="card"><h2 style="margin-bottom:10px">Welcome to HwiCortex Dashboard</h2>';
+    if (noColls && noWiki) {
+      html += '<div class="card"><h2 style="margin-bottom:10px">Welcome to HwiCortex Dashboard</h2>';
       html += '<p style="margin-bottom:8px">No collections or wiki pages found. Get started:</p>';
       html += '<pre style="background:#f5f5f5;padding:10px;border-radius:6px;font-size:13px">';
       html += 'hwicortex collection add &lt;path&gt;\nhwicortex embed --collection &lt;name&gt;\nhwicortex wiki create &lt;project&gt; &lt;title&gt;</pre></div>';
-    } else if (!noWiki) {
-      html += '<div class="card">';
-      html += '<div class="card-title">Wiki Activity</div>';
+    } else {
+      html += '<div class="split-grid">';
+
+      // Left: Collections panel
+      html += '<section class="coll-panel card">';
+      html += '<div class="card-title">Collections</div>';
+      if (colls.length === 0) {
+        html += '<p style="color:#666">No real collections yet. Run <code>hwicortex collection add &lt;path&gt;</code></p>';
+      } else {
+        html += '<div class="coll-grid">';
+        for (var ci = 0; ci < colls.length; ci++) {
+          var c = colls[ci];
+          var hasOverlap = c.overlapsWith && c.overlapsWith.length > 0;
+          html += '<div class="coll-card" data-coll="' + escHtml(c.name || "") + '">';
+          html += '<div class="coll-card-name">' + escHtml(c.name || "");
+          if (hasOverlap) html += ' <span title="Overlapping paths">&#9888;</span>';
+          html += '</div>';
+          html += '<div class="coll-card-meta">' + escHtml(String(c.fileCount || 0)) + " files &middot; " + escHtml(relTime(c.lastUpdate)) + '</div>';
+          html += '<span class="badge ' + (c.hasContext ? "badge-ctx" : "badge-noctx") + '">' + (c.hasContext ? "ctx" : "no context") + '</span>';
+          if (hasOverlap) {
+            html += '<div class="coll-card-overlap">overlaps with: ' + escHtml(c.overlapsWith.join(", ")) + '</div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</section>';
+
+      // Right: Wiki panel
+      html += '<section class="wiki-panel card">';
+      html += '<div class="card-title">Wiki</div>';
+      var totalPages = (data.vault && data.vault.totalWikiPages) || 0;
+      html += '<div class="wiki-summary">' + escHtml(String(projects.length)) + ' ' + (projects.length === 1 ? 'wiki project' : 'wiki projects') + ' &middot; ' + escHtml(String(totalPages)) + ' page' + (totalPages === 1 ? '' : 's') + '</div>';
+
+      // Project list (clickable → search filter by project name)
+      if (projects.length > 0) {
+        html += '<h3 class="wiki-subhead">Projects</h3><ul class="wiki-projects">';
+        for (var pi = 0; pi < projects.length; pi++) {
+          var p = projects[pi];
+          html += '<li><a onclick="location.hash=\'#search?q=' + encodeURIComponent(p.name) + '\'">' + escHtml(p.name) + '</a> <span class="wiki-project-count">(' + escHtml(String(p.pageCount)) + ')</span></li>';
+        }
+        html += '</ul>';
+      }
+
+      // Recent / Top Hits / High Importance triple
       html += '<div class="wiki-grid">';
 
-      // Recent
       html += '<div class="wiki-col"><h3>Recent</h3><ul>';
       if (recent.length === 0) {
         html += '<li style="color:#999">—</li>';
@@ -792,7 +852,6 @@ function renderOverview() {
       }
       html += '</ul></div>';
 
-      // Top hits
       html += '<div class="wiki-col"><h3>Top Hits</h3><ul>';
       if (topHits.length === 0) {
         html += '<li style="color:#999">—</li>';
@@ -804,7 +863,6 @@ function renderOverview() {
       }
       html += '</ul></div>';
 
-      // High importance
       html += '<div class="wiki-col"><h3>High Importance</h3><ul>';
       if (highImp.length === 0) {
         html += '<li style="color:#999">—</li>';
@@ -815,8 +873,10 @@ function renderOverview() {
         }
       }
       html += '</ul></div>';
+      html += '</div>'; // .wiki-grid
 
-      html += '</div></div>';
+      html += '</section>'; // .wiki-panel
+      html += '</div>'; // .split-grid
     }
 
     view.innerHTML = html;
@@ -857,6 +917,61 @@ function renderTags() {
     }
     view.innerHTML = html;
   }).catch(function(err) { renderError(err.message || String(err)); });
+}
+
+function renderHelp() {
+  var view = document.getElementById("view");
+  var html = '';
+
+  // Section 1: Collection vs Wiki
+  html += '<section class="card help-section">';
+  html += '<h2>Collection vs Wiki</h2>';
+  html += '<p>HwiCortex는 두 가지 형태의 문서 저장소를 다룹니다.</p>';
+  html += '<table class="help-table"><thead><tr><th></th><th>Collection</th><th>Wiki</th></tr></thead><tbody>';
+  html += '<tr><th>등록</th><td><code>hwicortex collection add &lt;path&gt;</code> 로 사용자가 직접 등록</td><td>볼트 디렉터리(<code>QMD_VAULT_DIR/wiki/</code>) 아래 파일이 자동 인덱싱됨</td></tr>';
+  html += '<tr><th>위치</th><td>임의의 경로 (<code>~/projects/foo</code> 등)</td><td>볼트 안 <code>wiki/&lt;project&gt;/</code></td></tr>';
+  html += '<tr><th>메타</th><td>YAML <code>context</code>로 컬렉션 단위 설명 추가</td><td>페이지 frontmatter (<code>title</code>, <code>tags</code>, <code>importance</code>, <code>hit_count</code> 등)</td></tr>';
+  html += '<tr><th>용도</th><td>외부 코드/문서 검색 인덱싱</td><td>대화형 지식&middot;노트 누적, 검색 시 자동 hit 카운트 업데이트</td></tr>';
+  html += '</tbody></table>';
+  html += '</section>';
+
+  // Section 2: Health Alerts
+  html += '<section class="card help-section">';
+  html += '<h2>Health Alerts</h2>';
+  html += '<p>Overview 상단에 표시되는 5가지 코드의 의미와 대응 명령:</p>';
+  html += '<dl class="help-dl">';
+  html += '<dt><code>overlap</code></dt><dd>두 컬렉션 경로가 한쪽이 다른 쪽의 prefix인 경우. 한쪽을 <code>hwicortex collection rm</code> 으로 정리하세요.</dd>';
+  html += '<dt><code>no-context</code></dt><dd>컬렉션에 컨텍스트 설명이 없어서 검색 랭킹 품질이 낮음. <code>hwicortex context add qmd://&lt;name&gt;/ "&lt;설명&gt;"</code></dd>';
+  html += '<dt><code>empty</code></dt><dd>컬렉션이 비었음 (경로 오타이거나 파일이 사라졌을 수 있음). 등록 경로를 확인하세요.</dd>';
+  html += '<dt><code>no-embedding</code></dt><dd>일부 문서에 임베딩이 없어서 벡터 검색이 누락됨. <code>hwicortex embed --collection &lt;name&gt;</code></dd>';
+  html += '<dt><code>stale</code></dt><dd>30일 넘게 한 번도 hit되지 않은 위키 페이지 목록. 정리 후보입니다.</dd>';
+  html += '</dl>';
+  html += '</section>';
+
+  // Section 3: CLI quick reference
+  html += '<section class="card help-section">';
+  html += '<h2>CLI 빠른 참조</h2>';
+  html += '<h3>Collection</h3>';
+  html += '<pre class="help-pre">hwicortex collection add &lt;path&gt;     # 컬렉션 등록\nhwicortex collection list             # 등록된 컬렉션 보기\nhwicortex collection rm &lt;name&gt;        # 제거</pre>';
+  html += '<h3>Wiki</h3>';
+  html += '<pre class="help-pre">hwicortex wiki create &lt;title&gt; --project &lt;name&gt; [--tags t1,t2]\nhwicortex wiki list [--project &lt;name&gt;] [--tag &lt;tag&gt;]\nhwicortex wiki show &lt;title&gt; --project &lt;name&gt;</pre>';
+  html += '<h3>Indexing &amp; Search</h3>';
+  html += '<pre class="help-pre">hwicortex update              # 변경 파일 재인덱싱\nhwicortex embed [--collection &lt;name&gt;]\nhwicortex search &lt;query&gt;\nhwicortex query &lt;query&gt;       # LLM 응답</pre>';
+  html += '</section>';
+
+  // Section 4: Dashboard usage
+  html += '<section class="card help-section">';
+  html += '<h2>대시보드 사용법</h2>';
+  html += '<ul class="help-list">';
+  html += '<li><strong>탭</strong>: Overview / Tags / Help. URL 해시(<code>#overview</code>)로 직접 이동 가능.</li>';
+  html += '<li><strong>검색바</strong>: 입력 시 200ms 디바운스 드롭다운 추천. Enter로 전체 결과 페이지로 이동.</li>';
+  html += '<li><strong>카드/태그 클릭</strong>: 해당 컬렉션/태그로 검색 필터링.</li>';
+  html += '<li><strong>Refresh 버튼</strong>: 현재 뷰만 다시 로드 (전체 새로고침 없이).</li>';
+  html += '<li><strong>키보드</strong>: ESC로 모달/드롭다운 닫기.</li>';
+  html += '</ul>';
+  html += '</section>';
+
+  view.innerHTML = html;
 }
 
 function renderCollection(name) {
@@ -1153,6 +1268,7 @@ export type Overview = {
     path: string;
     totalDocs: number;
     totalCollections: number;
+    totalWikiProjects: number;
     totalWikiPages: number;
     lastUpdate: string | null;
   };
@@ -1167,6 +1283,7 @@ export type Overview = {
     overlapsWith: string[];
   }>;
   wiki: {
+    projects: Array<{ name: string; pageCount: number }>;
     recent: WikiPageMeta[];
     topHits: WikiPageMeta[];
     highImportance: WikiPageMeta[];
@@ -1198,7 +1315,8 @@ export function getOverview(store: Store, vaultDir: string): Overview {
     updated: w.updated ?? "",
   }));
 
-  const collectionRows = collections.map((c) => {
+  const realCollections = collections.filter((c) => c.name !== "wiki");
+  const collectionRows = realCollections.map((c) => {
     const fileCount = (
       db
         .prepare("SELECT COUNT(*) AS n FROM documents WHERE collection=? AND active=1")
@@ -1233,17 +1351,27 @@ export function getOverview(store: Store, vaultDir: string): Overview {
     card.overlapsWith = overlapPartners;
   }
 
+  const projectCounts = new Map<string, number>();
+  for (const w of wikiMeta) {
+    projectCounts.set(w.project, (projectCounts.get(w.project) ?? 0) + 1);
+  }
+  const wikiProjects = [...projectCounts.entries()]
+    .map(([name, pageCount]) => ({ name, pageCount }))
+    .sort((a, b) => b.pageCount - a.pageCount);
+
   return {
     vault: {
       path: vaultDir,
       totalDocs,
-      totalCollections: collections.length,
+      totalCollections: realCollections.length,
+      totalWikiProjects: projectCounts.size,
       totalWikiPages: wikiPages.length,
       lastUpdate,
     },
     alerts,
     collections: collectionRows,
     wiki: {
+      projects: wikiProjects,
       recent: [...wikiMeta]
         .sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? ""))
         .slice(0, 5),
