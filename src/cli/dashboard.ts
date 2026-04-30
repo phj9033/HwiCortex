@@ -566,6 +566,29 @@ header {
 .backlinks li { padding: 2px 0; }
 .backlinks a { color: #1a56db; text-decoration: none; }
 .backlinks a:hover { text-decoration: underline; }
+
+/* ---- Split Overview layout ---- */
+.split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+@media (max-width: 900px) {
+  .split-grid { grid-template-columns: 1fr; }
+}
+.coll-panel .coll-grid { grid-template-columns: 1fr; gap: 8px; }
+.wiki-panel .wiki-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+@media (max-width: 700px) {
+  .wiki-panel .wiki-grid { grid-template-columns: 1fr; }
+}
+.wiki-summary { color: #666; font-size: 13px; margin-bottom: 10px; }
+.wiki-subhead { font-size: 13px; font-weight: 600; color: #555; margin: 8px 0 4px; }
+.wiki-projects { list-style: none; padding: 0; margin: 0 0 12px; font-size: 13px; }
+.wiki-projects li { padding: 2px 0; }
+.wiki-projects a { color: #1a56db; cursor: pointer; text-decoration: none; }
+.wiki-projects a:hover { text-decoration: underline; }
+.wiki-project-count { color: #999; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -705,8 +728,9 @@ function renderOverview() {
     html += '<h2>HwiCortex Vault: ' + escHtml(v.path || "") + '</h2>';
     html += '<div class="vault-meta">';
     html += escHtml(String(v.totalCollections || 0)) + " collection" + (v.totalCollections === 1 ? "" : "s") + " &middot; ";
-    html += escHtml(String(v.totalDocs || 0)) + " doc" + (v.totalDocs === 1 ? "" : "s") + " &middot; ";
+    html += escHtml(String(v.totalWikiProjects || 0)) + " " + (v.totalWikiProjects === 1 ? "wiki project" : "wiki projects") + " &middot; ";
     html += escHtml(String(v.totalWikiPages || 0)) + " wiki page" + (v.totalWikiPages === 1 ? "" : "s") + " &middot; ";
+    html += escHtml(String(v.totalDocs || 0)) + " doc" + (v.totalDocs === 1 ? "" : "s") + " &middot; ";
     html += "Last updated " + escHtml(relTime(v.lastUpdate));
     html += "</div></div>";
 
@@ -737,50 +761,69 @@ function renderOverview() {
       html += '</div>';
     }
 
-    // Widget B — Collection Cards
+    // Widget B/C — Two-panel Collections | Wiki layout
     var colls = data.collections || [];
-    if (colls.length === 0) {
-      html += '<div class="card"><p>No collections yet. Run <code>hwicortex collection add &lt;path&gt;</code></p></div>';
-    } else {
-      html += '<div class="coll-grid">';
-      for (var ci = 0; ci < colls.length; ci++) {
-        var c = colls[ci];
-        var hasOverlap = c.overlapsWith && c.overlapsWith.length > 0;
-        html += '<div class="coll-card" data-coll="' + escHtml(c.name || "") + '">';
-        html += '<div class="coll-card-name">' + escHtml(c.name || "");
-        if (hasOverlap) html += ' <span title="Overlapping paths">&#9888;</span>';
-        html += '</div>';
-        html += '<div class="coll-card-meta">' + escHtml(String(c.fileCount || 0)) + " files &middot; " + escHtml(relTime(c.lastUpdate)) + '</div>';
-        html += '<span class="badge ' + (c.hasContext ? "badge-ctx" : "badge-noctx") + '">' + (c.hasContext ? "ctx" : "no context") + '</span>';
-        if (hasOverlap) {
-          html += '<div class="coll-card-overlap">overlaps with: ' + escHtml(c.overlapsWith.join(", ")) + '</div>';
-        }
-        html += '</div>';
-      }
-      html += '</div>';
-    }
-
-    // Widget C — Wiki Activity
     var wiki = data.wiki || {};
+    var projects = wiki.projects || [];
     var recent = wiki.recent || [];
     var topHits = wiki.topHits || [];
     var highImp = wiki.highImportance || [];
 
-    var noWiki = recent.length === 0 && topHits.length === 0 && highImp.length === 0;
+    var noWiki = recent.length === 0 && topHits.length === 0 && highImp.length === 0 && projects.length === 0;
     var noColls = colls.length === 0;
 
-    if (noWiki && noColls) {
-      // Replace the collection empty-state with a combined welcome
-      html = '<div class="card"><h2 style="margin-bottom:10px">Welcome to HwiCortex Dashboard</h2>';
+    if (noColls && noWiki) {
+      html += '<div class="card"><h2 style="margin-bottom:10px">Welcome to HwiCortex Dashboard</h2>';
       html += '<p style="margin-bottom:8px">No collections or wiki pages found. Get started:</p>';
       html += '<pre style="background:#f5f5f5;padding:10px;border-radius:6px;font-size:13px">';
       html += 'hwicortex collection add &lt;path&gt;\nhwicortex embed --collection &lt;name&gt;\nhwicortex wiki create &lt;project&gt; &lt;title&gt;</pre></div>';
-    } else if (!noWiki) {
-      html += '<div class="card">';
-      html += '<div class="card-title">Wiki Activity</div>';
+    } else {
+      html += '<div class="split-grid">';
+
+      // Left: Collections panel
+      html += '<section class="coll-panel card">';
+      html += '<div class="card-title">Collections</div>';
+      if (colls.length === 0) {
+        html += '<p style="color:#666">No real collections yet. Run <code>hwicortex collection add &lt;path&gt;</code></p>';
+      } else {
+        html += '<div class="coll-grid">';
+        for (var ci = 0; ci < colls.length; ci++) {
+          var c = colls[ci];
+          var hasOverlap = c.overlapsWith && c.overlapsWith.length > 0;
+          html += '<div class="coll-card" data-coll="' + escHtml(c.name || "") + '">';
+          html += '<div class="coll-card-name">' + escHtml(c.name || "");
+          if (hasOverlap) html += ' <span title="Overlapping paths">&#9888;</span>';
+          html += '</div>';
+          html += '<div class="coll-card-meta">' + escHtml(String(c.fileCount || 0)) + " files &middot; " + escHtml(relTime(c.lastUpdate)) + '</div>';
+          html += '<span class="badge ' + (c.hasContext ? "badge-ctx" : "badge-noctx") + '">' + (c.hasContext ? "ctx" : "no context") + '</span>';
+          if (hasOverlap) {
+            html += '<div class="coll-card-overlap">overlaps with: ' + escHtml(c.overlapsWith.join(", ")) + '</div>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      html += '</section>';
+
+      // Right: Wiki panel
+      html += '<section class="wiki-panel card">';
+      html += '<div class="card-title">Wiki</div>';
+      var totalPages = (data.vault && data.vault.totalWikiPages) || 0;
+      html += '<div class="wiki-summary">' + escHtml(String(projects.length)) + ' ' + (projects.length === 1 ? 'wiki project' : 'wiki projects') + ' &middot; ' + escHtml(String(totalPages)) + ' page' + (totalPages === 1 ? '' : 's') + '</div>';
+
+      // Project list (clickable → search filter by project name)
+      if (projects.length > 0) {
+        html += '<h3 class="wiki-subhead">Projects</h3><ul class="wiki-projects">';
+        for (var pi = 0; pi < projects.length; pi++) {
+          var p = projects[pi];
+          html += '<li><a onclick="location.hash=\'#search?q=' + encodeURIComponent(p.name) + '\'">' + escHtml(p.name) + '</a> <span class="wiki-project-count">(' + escHtml(String(p.pageCount)) + ')</span></li>';
+        }
+        html += '</ul>';
+      }
+
+      // Recent / Top Hits / High Importance triple
       html += '<div class="wiki-grid">';
 
-      // Recent
       html += '<div class="wiki-col"><h3>Recent</h3><ul>';
       if (recent.length === 0) {
         html += '<li style="color:#999">—</li>';
@@ -792,7 +835,6 @@ function renderOverview() {
       }
       html += '</ul></div>';
 
-      // Top hits
       html += '<div class="wiki-col"><h3>Top Hits</h3><ul>';
       if (topHits.length === 0) {
         html += '<li style="color:#999">—</li>';
@@ -804,7 +846,6 @@ function renderOverview() {
       }
       html += '</ul></div>';
 
-      // High importance
       html += '<div class="wiki-col"><h3>High Importance</h3><ul>';
       if (highImp.length === 0) {
         html += '<li style="color:#999">—</li>';
@@ -815,8 +856,10 @@ function renderOverview() {
         }
       }
       html += '</ul></div>';
+      html += '</div>'; // .wiki-grid
 
-      html += '</div></div>';
+      html += '</section>'; // .wiki-panel
+      html += '</div>'; // .split-grid
     }
 
     view.innerHTML = html;

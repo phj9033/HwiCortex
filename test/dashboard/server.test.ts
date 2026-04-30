@@ -120,4 +120,15 @@ describe("HTTP routes", () => {
     const body = await r.json();
     expect(body.results).toEqual([]);
   });
+
+  it("HTML shell includes split Overview layout markers", async () => {
+    const r = await fetch(baseUrl + "/");
+    const body = await r.text();
+    // Two-panel layout class
+    expect(body).toContain("split-grid");
+    // Wiki panel summary copy
+    expect(body).toContain("wiki project");
+    // Vault header now mentions "wiki projects" not just "wiki pages"
+    expect(body).toContain("wiki projects");
+  });
 });
