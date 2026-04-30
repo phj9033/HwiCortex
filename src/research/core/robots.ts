@@ -36,9 +36,10 @@ function checkRobots(body: string, ua: string, path: string): boolean {
   let cur: Group | null = null;
 
   for (const line of lines) {
-    const [k0, ...rest] = line.split(":");
-    const key = k0.trim().toLowerCase();
-    const val = rest.join(":").trim();
+    const parts = line.split(":");
+    if (parts.length < 2) continue;
+    const key = (parts[0] ?? "").trim().toLowerCase();
+    const val = parts.slice(1).join(":").trim();
     if (key === "user-agent") {
       if (!cur) {
         cur = { ua: val, rules: [] };
