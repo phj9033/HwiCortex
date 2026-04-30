@@ -1,12 +1,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { getOverview, getTags, getCollectionDetail, getWikiPageDetail } from "../../src/cli/dashboard.js";
+import { upsertStoreCollection } from "../../src/store.js";
 import { makeTempStore, makeTempVault, writeWikiPage } from "./fixtures.js";
 
 describe("getOverview", () => {
   let cleanup: (() => void) | null = null;
   afterEach(() => { cleanup?.(); cleanup = null; });
 
-  it("returns vault counters and wiki activity", async () => {
+  it("returns vault counters and wiki activity", () => {
     const { store, cleanup: c } = makeTempStore();
     cleanup = c;
     const vault = makeTempVault();
@@ -16,8 +17,8 @@ describe("getOverview", () => {
 
     // Register two collections directly in the DB:
     //  - "wiki": synthetic, normally created by ensureWikiCollection()
-    //  - "bb3specs": a real user collection
-    const { upsertStoreCollection } = await import("../../src/store.js");
+    //  - "bb3specs": a representative non-wiki user collection (path need not exist;
+    //    we only assert filtering of the synthetic wiki collection)
     upsertStoreCollection(store.db, "wiki", { path: vault, type: "static" });
     upsertStoreCollection(store.db, "bb3specs", { path: "/some/real/path", type: "static" });
 
