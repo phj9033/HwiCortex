@@ -16,6 +16,7 @@ import {
   TavilyProvider,
   makeWebSearchDiscovery,
 } from "../sources/web-search.js";
+import { fromDocument } from "../sources/from-document.js";
 import type { Discovery } from "../sources/types.js";
 import type { TopicSpec, SourceSpec } from "../topic/schema.js";
 import { createAnthropicClient, type LlmClient } from "../llm/client.js";
@@ -72,8 +73,7 @@ function makeRegistry(
     "seed-urls": seedUrls,
     "arxiv": arxivDiscovery,
     "rss": rssDiscovery,
-    // Filled in later in Phase E:
-    // "from-document": fromDocument,
+    "from-document": fromDocument,
   };
   if (config.search?.provider === "brave" && config.search.brave?.api_key) {
     reg["web-search"] = makeWebSearchDiscovery(
