@@ -17,6 +17,19 @@ const SOURCE_TYPES: ReadonlySet<SourceSpec["type"]> = new Set([
   "web-search",
 ]);
 
+function wantsHelp(argv: string[]): boolean {
+  return argv.includes("--help") || argv.includes("-h");
+}
+
+function printHelp(usage: string): void {
+  process.stdout.write(usage.endsWith("\n") ? usage : usage + "\n");
+}
+
+const RESEARCH_USAGE =
+  "usage: hwicortex research <fetch|search|topic|import|status> ...\n" +
+  "  Synthesis and draft writing are now agent-driven; see\n" +
+  "  docs/research/agent-guide.md and the /research-build / /research-draft skills.";
+
 export async function runResearchCli(argv: string[]): Promise<void> {
   const [sub, ...rest] = argv;
   switch (sub) {
@@ -35,17 +48,32 @@ export async function runResearchCli(argv: string[]): Promise<void> {
     case "status":
       await runStatus(rest);
       return;
+    case "--help":
+    case "-h":
+      printHelp(RESEARCH_USAGE);
+      return;
     default:
-      console.error(
-        "usage: hwicortex research <fetch|search|topic|import|status> ...\n" +
-          "  Synthesis and draft writing are now agent-driven; see\n" +
-          "  docs/research/agent-guide.md and the /research-build / /research-draft skills.",
-      );
+      console.error(RESEARCH_USAGE);
       process.exitCode = 1;
   }
 }
 
+const FETCH_USAGE =
+  "usage: hwicortex research fetch <topic-id|prompt> [options]\n" +
+  "  --max-new <N>     max raw records to add this run\n" +
+  "  --source <type>   only run one source: " +
+  [...SOURCE_TYPES].join("|") +
+  "\n" +
+  "  --refresh         ignore cache, refetch\n" +
+  "  --dry-run         discovery only, no HTTP fetch\n" +
+  "  --vault <path>    override QMD_VAULT_DIR\n" +
+  "  --json            machine-readable output";
+
 async function runFetch(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(FETCH_USAGE);
+    return;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -61,7 +89,7 @@ async function runFetch(argv: string[]): Promise<void> {
 
   const target = positionals[0];
   if (!target) {
-    console.error("usage: hwicortex research fetch <topic-id|prompt>");
+    console.error(FETCH_USAGE);
     process.exitCode = 1;
     return;
   }
@@ -107,7 +135,20 @@ async function runFetch(argv: string[]): Promise<void> {
   }
 }
 
+const SEARCH_USAGE =
+  "usage: hwicortex research search <topic-id> --query \"...\" [options]\n" +
+  "  --query \"...\"      required search text\n" +
+  "  --top-k <N>        number of hits\n" +
+  "  --include-vault    search the whole vault, not just topic notes\n" +
+  "  --db-path <path>   override per-topic RAG sqlite path\n" +
+  "  --vault <path>     override QMD_VAULT_DIR\n" +
+  "  --json             machine-readable output";
+
 async function runSearch(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(SEARCH_USAGE);
+    return;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -122,7 +163,7 @@ async function runSearch(argv: string[]): Promise<void> {
   });
   const id = positionals[0];
   if (!id || !values.query) {
-    console.error("usage: hwicortex research search <topic-id> --query <text> [--top-k N] [--include-vault]");
+    console.error(SEARCH_USAGE);
     process.exitCode = 1;
     return;
   }
@@ -153,7 +194,14 @@ async function runSearch(argv: string[]): Promise<void> {
   }
 }
 
+const STATUS_USAGE =
+  "usage: hwicortex research status <topic-id> [--json] [--vault <path>]";
+
 async function runStatus(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(STATUS_USAGE);
+    return;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -164,7 +212,7 @@ async function runStatus(argv: string[]): Promise<void> {
   });
   const id = positionals[0];
   if (!id) {
-    console.error("usage: hwicortex research status <topic-id>");
+    console.error(STATUS_USAGE);
     process.exitCode = 1;
     return;
   }
@@ -181,7 +229,16 @@ async function runStatus(argv: string[]): Promise<void> {
   }
 }
 
+const IMPORT_USAGE =
+  "usage: hwicortex research import <topic-id> <doc-path> [--json] [--vault <path>]\n" +
+  "  Extracts URLs from <doc-path> and runs fetch with a one-shot from-document\n" +
+  "  source. Topic YAML is not modified.";
+
 async function runImport(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(IMPORT_USAGE);
+    return;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -193,9 +250,7 @@ async function runImport(argv: string[]): Promise<void> {
 
   const [topicId, docPath] = positionals;
   if (!topicId || !docPath) {
-    console.error(
-      "usage: hwicortex research import <topic-id> <doc-path>",
-    );
+    console.error(IMPORT_USAGE);
     process.exitCode = 1;
     return;
   }
@@ -236,6 +291,8 @@ async function runImport(argv: string[]): Promise<void> {
   }
 }
 
+const TOPIC_USAGE = "usage: hwicortex research topic <new|list|show> ...";
+
 async function runTopic(argv: string[]): Promise<void> {
   const [verb, ...rest] = argv;
   switch (verb) {
@@ -245,13 +302,24 @@ async function runTopic(argv: string[]): Promise<void> {
       return runTopicList(rest);
     case "show":
       return runTopicShow(rest);
+    case "--help":
+    case "-h":
+      printHelp(TOPIC_USAGE);
+      return;
     default:
-      console.error("usage: hwicortex research topic <new|list|show> ...");
+      console.error(TOPIC_USAGE);
       process.exitCode = 1;
   }
 }
 
+const TOPIC_NEW_USAGE =
+  "usage: hwicortex research topic new <id> [--from-prompt \"...\"] [--vault <path>]";
+
 async function runTopicNew(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(TOPIC_NEW_USAGE);
+    return;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -262,7 +330,7 @@ async function runTopicNew(argv: string[]): Promise<void> {
   });
   const id = positionals[0];
   if (!id) {
-    console.error("usage: hwicortex research topic new <id> [--from-prompt \"...\"]");
+    console.error(TOPIC_NEW_USAGE);
     process.exitCode = 1;
     return;
   }
@@ -276,7 +344,14 @@ async function runTopicNew(argv: string[]): Promise<void> {
   }
 }
 
+const TOPIC_LIST_USAGE =
+  "usage: hwicortex research topic list [--json] [--vault <path>]";
+
 async function runTopicList(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(TOPIC_LIST_USAGE);
+    return;
+  }
   const { values } = parseArgs({
     args: argv,
     allowPositionals: false,
@@ -295,7 +370,14 @@ async function runTopicList(argv: string[]): Promise<void> {
   }
 }
 
+const TOPIC_SHOW_USAGE =
+  "usage: hwicortex research topic show <id> [--json] [--vault <path>]";
+
 async function runTopicShow(argv: string[]): Promise<void> {
+  if (wantsHelp(argv)) {
+    printHelp(TOPIC_SHOW_USAGE);
+    return;
+  }
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
@@ -306,7 +388,7 @@ async function runTopicShow(argv: string[]): Promise<void> {
   });
   const id = positionals[0];
   if (!id) {
-    console.error("usage: hwicortex research topic show <id>");
+    console.error(TOPIC_SHOW_USAGE);
     process.exitCode = 1;
     return;
   }
