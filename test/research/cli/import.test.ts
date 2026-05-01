@@ -11,7 +11,7 @@ import { _resetRobotsCacheForTests } from "../../../src/research/core/robots.js"
 // The CLI's runImport is a thin wrapper around fetchTopic with an injected
 // from-document source. We verify the underlying behavior here — that an
 // in-memory augmented topic with a from-document source actually drives
-// the seeds-only flow end-to-end. This keeps the test stable without
+// the fetch pipeline end-to-end. This keeps the test stable without
 // touching process.argv.
 
 const longBody = "lorem ipsum ".repeat(100);
@@ -39,28 +39,18 @@ const cfg = {
     timeout_ms: 1000,
     max_redirects: 5,
   },
-  budget: { max_new_urls: 10, max_total_bytes: 10_000_000, max_llm_cost_usd: 0.5 },
-  models: {
-    card: "claude-haiku-4-5",
-    synth: "claude-sonnet-4-6",
-    draft: "claude-sonnet-4-6",
-  },
+  budget: { max_new_urls: 10, max_total_bytes: 10_000_000 },
 };
 
 describe("import (in-memory from-document source)", () => {
-  it("seeds-only: extracts URLs from a doc and runs the fetch pipeline", async () => {
+  it("extracts URLs from a doc and runs the fetch pipeline", async () => {
     const docPath = join(vault, "doc.md");
     writeFileSync(docPath, "Read https://i.com/a for context.");
     const topic = parseTopic({
       id: "imp",
       title: "Imported topic",
       sources: [
-        {
-          type: "from-document",
-          path: docPath,
-          mode: "seeds-only",
-          refetch: false,
-        },
+        { type: "from-document", path: docPath },
       ],
     });
     const r = await fetchTopic({
@@ -68,7 +58,6 @@ describe("import (in-memory from-document source)", () => {
       vault,
       config: cfg,
       source: "from-document",
-      cardsEnabled: false,
     });
     expect(r.records_added).toBe(1);
     const raw = readFileSync(

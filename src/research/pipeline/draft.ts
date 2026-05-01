@@ -1,42 +1,46 @@
 import { join } from "path";
-import { createStore, type QMDStore } from "../../index.js";
+import { createStore, type QMDStore, type HybridQueryResult } from "../../index.js";
 import { notesDir } from "../topic/paths.js";
-import { writeDraftFile } from "../store/drafts.js";
-import { writeDraft, type DraftStyle } from "../llm/draft.js";
-import { createAnthropicClient, type LlmClient } from "../llm/client.js";
 import type { TopicSpec } from "../topic/schema.js";
 
-export type DraftOptions = {
+export type DraftContext = {
+  source_id: string;
+  title: string;
+  snippet: string;
+  path: string;
+};
+
+export type SearchTopicOptions = {
   topic: TopicSpec;
   vault: string;
-  prompt: string;
-  slug?: string;
+  query: string;
   topK?: number;
   includeVault?: boolean;
-  style?: DraftStyle;
-  model: string;
-  /** SQLite path for the per-topic RAG index (defaults under _staging). */
+  /** SQLite path for the per-topic RAG index. Defaults under _staging. */
   dbPath?: string;
-  requireContext?: boolean;
-  /** Test seam: inject a custom LLM client. Unset = production Anthropic client. */
-  _llmClient?: LlmClient;
   /** Test seam: inject a pre-built store (skips createStore + update + embed). */
   _store?: QMDStore;
 };
 
-export type DraftResult = {
-  path: string;
-  cost_usd: number;
-  cited: string[];
+export type SearchTopicResult = {
+  hits: HybridQueryResult[];
+  context: DraftContext[];
 };
 
 export function defaultDraftDbPath(vault: string, topicId: string): string {
   return join(vault, "research", "_staging", topicId, "draft-rag.sqlite");
 }
 
-export async function draft(opts: DraftOptions): Promise<DraftResult> {
-  const { topic, vault, prompt } = opts;
-  const slug = opts.slug ?? slugFromPrompt(prompt);
+/**
+ * Build (or reuse) a per-topic SDK store and return RAG hits + a
+ * source-id-keyed DraftContext array suitable for handing to an external
+ * agent that will compose the draft body itself.
+ *
+ * No LLM call. Indexing/embedding/rerank are local llama-cpp; HTTP and
+ * Anthropic are NOT involved.
+ */
+export async function searchTopic(opts: SearchTopicOptions): Promise<SearchTopicResult> {
+  const { topic, vault, query } = opts;
   const collectionPath = opts.includeVault ? vault : notesDir(vault, topic.id);
   const collectionName = `research-${topic.id}`;
 
@@ -58,17 +62,13 @@ export async function draft(opts: DraftOptions): Promise<DraftResult> {
 
   try {
     const hits = await store.search({
-      query: prompt,
+      query,
       collections: [collectionName],
       limit: opts.topK ?? 12,
       rerank: true,
     });
 
-    if (hits.length === 0 && opts.requireContext) {
-      throw new Error("require_context: no RAG hits");
-    }
-
-    const context = hits
+    const context: DraftContext[] = hits
       .map(h => ({
         source_id: extractSourceId(h.displayPath ?? h.file) ?? "",
         title: h.title || h.displayPath || h.file,
@@ -77,19 +77,7 @@ export async function draft(opts: DraftOptions): Promise<DraftResult> {
       }))
       .filter(c => c.source_id);
 
-    const llm = opts._llmClient ?? createAnthropicClient();
-    const out = await writeDraft(llm, prompt, context, opts.model, opts.style);
-    const path = writeDraftFile(vault, {
-      topic_id: topic.id,
-      slug,
-      prompt,
-      generated_at: new Date().toISOString(),
-      model: out.model,
-      context_sources: context.map(c => c.path),
-      include_vault: opts.includeVault ?? false,
-      body_md: out.body_md,
-    });
-    return { path, cost_usd: out.cost_usd, cited: out.cited };
+    return { hits, context };
   } finally {
     if (ownsStore) await store.close();
   }

@@ -30,9 +30,7 @@ export function scaffoldTopic(vault: string, id: string, fromPrompt?: string): s
     budget: {
       max_new_urls: 100,
       max_total_bytes: 50000000,
-      max_llm_cost_usd: 0.5,
     },
-    cards: { enabled: true, model: "claude-haiku-4-5" },
   };
   writeFileSync(path, yamlStringify(tpl));
   return path;

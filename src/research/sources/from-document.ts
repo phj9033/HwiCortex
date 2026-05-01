@@ -10,7 +10,6 @@ const TRAILING_PUNCT = /[.,;:)\]"'`]+$/;
 export const fromDocument: Discovery = {
   async *discover(spec: SourceSpec, ctx: DiscoveryCtx): AsyncIterable<DiscoveryItem> {
     if (spec.type !== "from-document") return;
-    if (spec.mode !== "seeds-only") return; // use-as-cards is handled in pipeline
 
     const path = isAbsolute(spec.path) ? spec.path : join(ctx.vault, spec.path);
     const txt = readFileSync(path, "utf-8");
