@@ -16,14 +16,18 @@
 
 _Last updated: 2026-05-01_
 
-- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (26 commits ahead of `main`)
-- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3)
-- **Resume from:** Phase E — Task E1 (arxiv source, plan line ~2337)
-- **All research tests:** 58/58 PASS via `npx vitest run test/research/` (~760ms)
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (33 commits ahead of `main`)
+- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3), Phase E (E1–E6)
+- **Resume from:** Phase F — Task F1 (Synthesis prompt + cluster auto-naming, plan line ~2811)
+- **All research tests:** 78/78 PASS via `npx vitest run test/research/` (~950ms)
 - **Notes for next session:**
   - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
-  - Three intentional plan deviations are documented in commit messages: `robots.ts` uses `fetch()` instead of `undici.request` (MSW compat + 5s timeout, exposes `_resetRobotsCacheForTests`); C2 uses synthesised article HTML fixtures instead of captured real-world pages; D3 explicitly adds `cardsEnabled: false` to the existing slice-1 fetch tests so the default `topic.cards.enabled = true` doesn't trigger a real Anthropic client during those tests.
-  - C5 wires `research` via early-dispatch in `qmd.ts` (before `parseCLI()`) so research-specific flags don't pollute the global parser.
+  - Intentional plan deviations on this branch (all documented in commit messages):
+    1. `robots.ts`, `arxiv.ts`, `web-search.ts` use native `fetch()` instead of `undici.request` (MSW compat; `undici` is not a dep on this branch).
+    2. C2 / E1 / E3 fixtures are synthesised, not captured real-world responses.
+    3. C5 early-dispatches `research` in `qmd.ts` before `parseCLI()` so research-specific flags don't pollute the global parser.
+    4. D3 explicitly adds `cardsEnabled: false` to the existing slice-1 fetch tests so the default `topic.cards.enabled = true` doesn't trigger a real Anthropic client during those tests.
+    5. E6 introduces `parsePdfBuffer()` in `src/ingest/pdf-parser.ts` (existing `PdfParser` only took a file path; pipeline needs an in-memory variant) and explicitly copies into a fresh `Uint8Array` because pdfjs rejects Node `Buffer` instances.
 
 ---
 
