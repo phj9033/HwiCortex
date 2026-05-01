@@ -11,6 +11,11 @@ import { RunLog } from "../store/log.js";
 import { seedUrls } from "../sources/seed-urls.js";
 import { arxivDiscovery } from "../sources/arxiv.js";
 import { rssDiscovery } from "../sources/rss.js";
+import {
+  BraveProvider,
+  TavilyProvider,
+  makeWebSearchDiscovery,
+} from "../sources/web-search.js";
 import type { Discovery } from "../sources/types.js";
 import type { TopicSpec, SourceSpec } from "../topic/schema.js";
 import { createAnthropicClient, type LlmClient } from "../llm/client.js";
@@ -60,14 +65,27 @@ export type FetchResult = {
   budget: ReturnType<Budget["report"]>;
 };
 
-const REGISTRY: Partial<Record<SourceSpec["type"], Discovery>> = {
-  "seed-urls": seedUrls,
-  "arxiv": arxivDiscovery,
-  "rss": rssDiscovery,
-  // Filled in Phase E:
-  // "web-search": webSearchDiscovery,
-  // "from-document": fromDocument,
-};
+function makeRegistry(
+  config: ResearchConfig,
+): Partial<Record<SourceSpec["type"], Discovery>> {
+  const reg: Partial<Record<SourceSpec["type"], Discovery>> = {
+    "seed-urls": seedUrls,
+    "arxiv": arxivDiscovery,
+    "rss": rssDiscovery,
+    // Filled in later in Phase E:
+    // "from-document": fromDocument,
+  };
+  if (config.search?.provider === "brave" && config.search.brave?.api_key) {
+    reg["web-search"] = makeWebSearchDiscovery(
+      new BraveProvider(config.search.brave.api_key),
+    );
+  } else if (config.search?.provider === "tavily" && config.search.tavily?.api_key) {
+    reg["web-search"] = makeWebSearchDiscovery(
+      new TavilyProvider(config.search.tavily.api_key),
+    );
+  }
+  return reg;
+}
 
 export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
   const { topic, vault, config } = opts;
@@ -103,9 +121,11 @@ export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
     budget: budget.report(),
   });
 
+  const registry = makeRegistry(config);
+
   for (const spec of topic.sources) {
     if (opts.source && spec.type !== opts.source) continue;
-    const adapter = REGISTRY[spec.type];
+    const adapter = registry[spec.type];
     if (!adapter) {
       log.emit({ kind: "fetch_skip", url: spec.type, reason: "no_adapter" });
       continue;
