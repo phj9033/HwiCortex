@@ -4,7 +4,6 @@ Bun 사용 (`bun`, `bun install`, `bun run build`). Node.js/npm 사용 금지.
 
 ## 절대 하지 말 것
 
-- `hwicortex collection add`, `hwicortex embed`, `hwicortex update`, `hwicortex extract` 자동 실행 금지 — 예시 명령어만 제시
 - SQLite DB 직접 수정 금지 (인덱스: `~/.cache/qmd/index.sqlite`)
 - `bun build --compile` 금지 — sqlite-vec 깨짐. `bin/hwicortex`는 셸 래퍼이므로 교체 금지
 
