@@ -23,7 +23,7 @@ describe("TopicSpec", () => {
         { type: "web-search", queries: ["foo"] },
         { type: "arxiv", queries: ["bar"], categories: ["cs.CL"] },
         { type: "rss", feeds: ["https://e.com/rss"] },
-        { type: "from-document", path: "./b.md", mode: "seeds-only" },
+        { type: "from-document", path: "./b.md" },
       ],
     });
     expect(t.sources).toHaveLength(4);
@@ -33,6 +33,5 @@ describe("TopicSpec", () => {
     const t = parseTopic({ id: "x", title: "x", sources: [] });
     expect(t.budget.max_new_urls).toBe(100);
     expect(t.budget.max_total_bytes).toBe(50_000_000);
-    expect(t.budget.max_llm_cost_usd).toBe(0.5);
   });
 });

@@ -199,27 +199,40 @@ await store.close();
 
 ## Research-to-Draft 파이프라인
 
-웹/arXiv/RSS/문서에서 출처를 수집하고, Haiku로 카드를 만들고, Sonnet으로 합성 노트와 인용을 갖춘 초안까지 자동 생성한다. 모든 산출물은 vault에 마크다운으로 저장되며, hwicortex 검색 인덱스로 다시 검색·인용할 수 있다.
+웹/arXiv/RSS/문서에서 출처를 수집하고, **이 세션의 어시스턴트가** 카드와 합성 노트와 초안을 직접 작성한다. hwicortex는 LLM 호출을 하지 않고 — HTTP fetch, 파일 IO, RAG 검색만 담당. 모든 산출물은 vault에 마크다운으로 저장된다.
 
 ```sh
 # 1. 토픽 신규 생성 (또는 기존 토픽 사용)
 hwicortex research topic new rag-eval --from-prompt "Evaluating RAG systems"
 
-# 2. 자료 수집 + 카드 생성 (Haiku)
+# 2. 자료 수집 — HTTP fetch + 추출만 (LLM 호출 없음)
 hwicortex research fetch rag-eval --max-new 20
-
-# 3. subtopic 클러스터링 + 합성 노트 (Sonnet)
-hwicortex research synthesize rag-eval
-
-# 4. RAG 컨텍스트 기반 초안 작성 (Sonnet)
-hwicortex research draft rag-eval --prompt "Survey current RAG evaluation methods" --style report
-
-# 결과: <vault>/research/drafts/rag-eval/<YYYY-MM-DD>-survey-current-rag-evaluation.md
 ```
 
-상태 확인은 `hwicortex research status <topic-id>`. 에이전트 통합용 도구 정의는 `import { research } from "hwicortex"`로 노출된다 (`research.researchTools`, `research.executeResearchTool`). 슬래시 스킬: `/research-pre`, `/research-build`, `/research-draft`, `/research-tidy`.
+**카드/합성/초안 작성은 어시스턴트의 작업.** Claude Code 등 LLM 권한을 가진 세션에서:
 
-외부 AI 에이전트 / MCP 호스트가 이 CLI를 자식 프로세스로 호출하는 경우 가이드: [`docs/research/agent-guide.md`](docs/research/agent-guide.md).
+- `/research-build rag-eval` — raw 레코드 → 카드, 카드 → 합성 노트
+- `/research-draft rag-eval --prompt "Survey current RAG evaluation methods"` — RAG 검색 → 초안 작성
+
+```sh
+# RAG 검색만 따로 (어시스턴트가 컨텍스트로 사용할 hits)
+hwicortex research search rag-eval --query "current RAG evaluation methods" --top-k 12 --json
+
+# 상태 확인
+hwicortex research status rag-eval --json
+```
+
+산출물 위치:
+- raw: `<vault>/research/_staging/<id>/raw.jsonl`
+- 카드: `<vault>/research/notes/<id>/sources/<source-id>.md`
+- 합성 노트: `<vault>/research/notes/<id>/<subtopic>.md`
+- 초안: `<vault>/research/drafts/<id>/<YYYY-MM-DD>-<slug>.md`
+
+SDK: `import { research } from "hwicortex"`로 `fetchTopic`, `searchTopic`, `writeCard`, `writeSynthesis`, `writeDraftFile`, `computeStatus` 등이 노출됨 — 어시스턴트가 자기 LLM으로 본문을 만들고 이 함수들로 vault에 저장.
+
+슬래시 스킬: `/research-pre` (fetch), `/research-build` (cards + synthesis), `/research-draft` (draft), `/research-tidy` (status), `/research-launch-headless` (헤드리스 세션 띄우는 가이드).
+
+외부 AI 에이전트 / MCP 호스트가 이 CLI를 자식 프로세스로 호출하는 경우: [`docs/research/agent-guide.md`](docs/research/agent-guide.md).
 
 설계 문서: `docs/superpowers/plans/2026-04-30-research-to-draft.md`.
 

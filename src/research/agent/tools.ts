@@ -1,26 +1,31 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { join } from "path";
 import { fetchTopic, type ResearchConfig } from "../pipeline/fetch.js";
-import { synthesize } from "../pipeline/synthesize.js";
-import { draft } from "../pipeline/draft.js";
+import { searchTopic, type SearchTopicResult } from "../pipeline/draft.js";
 import { computeStatus } from "../pipeline/status.js";
 import { loadTopic, adhocTopicFromPrompt } from "../topic/loader.js";
 import { listTopicIds } from "../topic/scaffold.js";
-import { stagingDir } from "../topic/paths.js";
 import type { SourceSpec } from "../topic/schema.js";
-import type { DraftStyle } from "../llm/draft.js";
 
+/**
+ * Anthropic tool-use definitions for the slimmed-down research pipeline.
+ *
+ * IMPORTANT: hwicortex no longer drives an LLM in-process. These tools
+ * cover only the data-plumbing primitives that an external agent
+ * composes. Synthesis and draft writing are NOT exposed as tools — the
+ * agent does that work in its own context using the cards markdown
+ * (read directly) and the `research_search` hits as RAG context.
+ */
 export const researchTools: Anthropic.Tool[] = [
   {
     name: "research_fetch",
-    description: "Fetch sources for a topic and generate cards.",
+    description:
+      "Discover + HTTP-fetch sources for a topic, write extracted records to research/_staging/<id>/raw.jsonl. No LLM call.",
     input_schema: {
       type: "object",
       properties: {
         topic_id: { type: "string" },
         max_new: { type: "integer", minimum: 1 },
         refresh: { type: "boolean" },
-        no_cards: { type: "boolean" },
         dry_run: { type: "boolean" },
         source: {
           type: "string",
@@ -31,33 +36,18 @@ export const researchTools: Anthropic.Tool[] = [
     },
   },
   {
-    name: "research_synthesize",
-    description: "Build synthesis notes for a topic. Auto-clusters if subtopic omitted.",
+    name: "research_search",
+    description:
+      "Build (or reuse) a per-topic SDK store and return RAG hits + a source-id-keyed context array. No LLM call. The agent uses the returned context to compose a draft body itself.",
     input_schema: {
       type: "object",
       properties: {
         topic_id: { type: "string" },
-        subtopic: { type: "string" },
-        refresh: { type: "boolean" },
-      },
-      required: ["topic_id"],
-    },
-  },
-  {
-    name: "research_draft",
-    description: "Generate a draft from topic context.",
-    input_schema: {
-      type: "object",
-      properties: {
-        topic_id: { type: "string" },
-        prompt: { type: "string" },
-        slug: { type: "string" },
-        include_vault: { type: "boolean" },
-        style: { type: "string", enum: ["blog", "report", "qa"] },
+        query: { type: "string" },
         top_k: { type: "integer", minimum: 1 },
-        require_context: { type: "boolean" },
+        include_vault: { type: "boolean" },
       },
-      required: ["topic_id", "prompt"],
+      required: ["topic_id", "query"],
     },
   },
   {
@@ -71,12 +61,12 @@ export const researchTools: Anthropic.Tool[] = [
   },
   {
     name: "research_topic_list",
-    description: "List topics.",
+    description: "List topic ids.",
     input_schema: { type: "object", properties: {} },
   },
   {
     name: "research_status",
-    description: "Show topic status (raw count, cards, costs).",
+    description: "Show topic status (raw count, cards, notes, drafts, run-log tail).",
     input_schema: {
       type: "object",
       properties: { topic_id: { type: "string" } },
@@ -88,9 +78,6 @@ export const researchTools: Anthropic.Tool[] = [
 export type AgentCtx = {
   vault: string;
   config: ResearchConfig;
-  /** Optional override for draft RAG db path. If omitted, uses
-   *  <vault>/research/_staging/<topic>/draft-rag.sqlite. */
-  dbPath?: string;
 };
 
 type ToolInput = Record<string, unknown>;
@@ -109,39 +96,23 @@ export async function executeResearchTool(
         config: ctx.config,
         refresh: asBool(input.refresh),
         maxNew: asNum(input.max_new),
-        cardsEnabled: !asBool(input.no_cards),
         source: input.source as SourceSpec["type"] | undefined,
         dryRun: asBool(input.dry_run),
       });
       return { content: JSON.stringify(r) };
     }
-    case "research_synthesize": {
+    case "research_search": {
       const topic = await loadTopic(asString(input.topic_id), ctx.vault);
-      const r = await synthesize({
+      const r: SearchTopicResult = await searchTopic({
         topic,
         vault: ctx.vault,
-        config: ctx.config,
-        subtopic: asString(input.subtopic) || undefined,
-        refresh: asBool(input.refresh),
-      });
-      return { content: JSON.stringify(r) };
-    }
-    case "research_draft": {
-      const topic = await loadTopic(asString(input.topic_id), ctx.vault);
-      const dbPath = ctx.dbPath ?? join(stagingDir(ctx.vault, topic.id), "draft-rag.sqlite");
-      const r = await draft({
-        topic,
-        vault: ctx.vault,
-        prompt: asString(input.prompt),
-        slug: asString(input.slug) || undefined,
-        includeVault: asBool(input.include_vault),
-        style: input.style as DraftStyle | undefined,
+        query: asString(input.query),
         topK: asNum(input.top_k),
-        requireContext: asBool(input.require_context),
-        model: ctx.config.models.draft,
-        dbPath,
+        includeVault: asBool(input.include_vault),
       });
-      return { content: JSON.stringify(r) };
+      // Agents care about the source-id-keyed context, not the verbose
+      // HybridQueryResult fields. Return only context for token economy.
+      return { content: JSON.stringify({ context: r.context }) };
     }
     case "research_topic_show": {
       const t = await loadTopic(asString(input.topic_id), ctx.vault);

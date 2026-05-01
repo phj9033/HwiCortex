@@ -1,43 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, mkdirSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { describe, it, expect } from "vitest";
 import {
-  draft,
+  searchTopic,
   defaultDraftDbPath,
   extractSourceId,
   slugFromPrompt,
 } from "../../../src/research/pipeline/draft.js";
-import { writeCard } from "../../../src/research/store/cards.js";
 import { parseTopic } from "../../../src/research/topic/schema.js";
-import { mockLlm } from "../_helpers/anthropic-mock.js";
-import type { Card } from "../../../src/research/core/types.js";
 import type { QMDStore } from "../../../src/index.js";
-
-const cardA: Card = {
-  source_id: "abcdef012345",
-  topic_id: "t1",
-  url: "https://x.com/a",
-  title: "RAG Survey",
-  author: null,
-  published: null,
-  fetched: "2026-04-30",
-  language: "en",
-  tags: ["rag"],
-  body_hash: "h1",
-  tldr: ["A.", "B.", "C."],
-  excerpts: ["RAG combines retrieval and generation."],
-};
-
-let vault: string;
-beforeEach(() => {
-  vault = mkdtempSync(join(tmpdir(), "v-"));
-  mkdirSync(join(vault, "research", "notes", "t1", "sources"), { recursive: true });
-  writeCard(vault, cardA);
-});
-afterEach(() => {
-  rmSync(vault, { recursive: true, force: true });
-});
 
 const topic = parseTopic({ id: "t1", title: "Test" });
 
@@ -50,8 +19,8 @@ function fakeStore(hits: any[]): QMDStore {
   } as any;
 }
 
-describe("draft pipeline", () => {
-  it("uses RAG hits as context, runs LLM, writes a draft file", async () => {
+describe("searchTopic", () => {
+  it("returns hits + a source-id-keyed context array", async () => {
     const store = fakeStore([
       {
         file: "qmd://research-t1/research/notes/t1/sources/abcdef012345.md",
@@ -65,44 +34,26 @@ describe("draft pipeline", () => {
         docid: "abcdef",
       },
     ]);
-    const llm = mockLlm([
-      "# RAG\n\nRAG combines retrieval and generation[^abcdef012345].\n\n[^abcdef012345]: ref",
-    ]);
 
-    const r = await draft({
+    const r = await searchTopic({
       topic,
-      vault,
-      prompt: "Explain RAG",
-      model: "claude-sonnet-4-6",
-      _llmClient: llm,
+      vault: "/tmp/vault",
+      query: "Explain RAG",
       _store: store,
     });
 
-    expect(r.path).toContain("research/drafts/t1/");
-    expect(r.cited).toEqual(["abcdef012345"]);
-    expect(r.cost_usd).toBeGreaterThan(0);
-    const txt = readFileSync(r.path, "utf-8");
-    expect(txt).toContain("type: research-draft");
-    expect(txt).toContain("# RAG");
+    expect(r.hits).toHaveLength(1);
+    expect(r.context).toEqual([
+      {
+        source_id: "abcdef012345",
+        title: "RAG Survey",
+        snippet: "RAG combines retrieval and generation.",
+        path: "research/notes/t1/sources/abcdef012345.md",
+      },
+    ]);
   });
 
-  it("throws when requireContext is set and there are no hits", async () => {
-    const store = fakeStore([]);
-    const llm = mockLlm(["unused"]);
-    await expect(
-      draft({
-        topic,
-        vault,
-        prompt: "What?",
-        model: "claude-sonnet-4-6",
-        requireContext: true,
-        _llmClient: llm,
-        _store: store,
-      }),
-    ).rejects.toThrow(/require_context/);
-  });
-
-  it("filters out hits whose path does not contain a 12-hex source_id", async () => {
+  it("filters out hits whose path does not encode a 12-hex source_id", async () => {
     const store = fakeStore([
       {
         file: "qmd://research-t1/random/note.md",
@@ -116,29 +67,38 @@ describe("draft pipeline", () => {
         docid: "stray0",
       },
     ]);
-    const captured: any[] = [];
-    const llm = {
-      async call(opts: any) {
-        captured.push(opts);
-        return {
-          text: "no citations",
-          usage: { input_tokens: 1, output_tokens: 1 },
-          cost_usd: 0.001,
-          model: opts.model,
-        };
-      },
-    };
-    const r = await draft({
+
+    const r = await searchTopic({
       topic,
-      vault,
-      prompt: "Q",
-      model: "claude-sonnet-4-6",
-      _llmClient: llm,
+      vault: "/tmp/vault",
+      query: "Q",
       _store: store,
     });
-    expect(r.cited).toEqual([]);
-    // The user content should not include a "###" context block
-    expect(captured[0].messages[0].content).not.toMatch(/###/);
+    expect(r.context).toEqual([]);
+    expect(r.hits).toHaveLength(1);
+  });
+
+  it("falls back to body slice when bestChunk is empty", async () => {
+    const store = fakeStore([
+      {
+        file: "qmd://research-t1/research/notes/t1/sources/abcdef012345.md",
+        displayPath: "research/notes/t1/sources/abcdef012345.md",
+        title: "T",
+        body: "x".repeat(2000),
+        bestChunk: "",
+        bestChunkPos: 0,
+        score: 0.5,
+        context: null,
+        docid: "abcdef",
+      },
+    ]);
+    const r = await searchTopic({
+      topic,
+      vault: "/tmp/vault",
+      query: "Q",
+      _store: store,
+    });
+    expect(r.context[0].snippet.length).toBe(800);
   });
 });
 

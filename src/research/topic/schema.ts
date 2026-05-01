@@ -30,8 +30,6 @@ const SourceSeedUrls = z.object({
 const SourceFromDocument = z.object({
   type: z.literal("from-document"),
   path: z.string().min(1),
-  mode: z.enum(["seeds-only", "use-as-cards"]).default("seeds-only"),
-  refetch: z.boolean().default(false),
 });
 
 const SourceSpec = z.discriminatedUnion("type", [
@@ -60,14 +58,6 @@ const Budget = z
   .object({
     max_new_urls: z.number().int().min(1).default(100),
     max_total_bytes: z.number().int().min(1).default(50_000_000),
-    max_llm_cost_usd: z.number().min(0).default(0.5),
-  })
-  .prefault({});
-
-const Cards = z
-  .object({
-    enabled: z.boolean().default(true),
-    model: z.string().default("claude-haiku-4-5"),
   })
   .prefault({});
 
@@ -81,7 +71,6 @@ export const TopicSpec = z.object({
   sources: z.array(SourceSpec).default([]),
   filters: Filters,
   budget: Budget,
-  cards: Cards,
 });
 
 export type TopicSpec = z.infer<typeof TopicSpec>;

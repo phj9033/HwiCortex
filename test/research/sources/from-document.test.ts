@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { fromDocument } from "../../../src/research/sources/from-document.js";
 
-describe("fromDocument seeds-only", () => {
+describe("fromDocument", () => {
   it("extracts URLs and ignores fenced code blocks", async () => {
     const v = mkdtempSync(join(tmpdir(), "v-"));
     try {
@@ -15,7 +15,7 @@ describe("fromDocument seeds-only", () => {
       );
       const out: any[] = [];
       for await (const it of fromDocument.discover(
-        { type: "from-document", path: doc, mode: "seeds-only", refetch: false } as any,
+        { type: "from-document", path: doc } as any,
         { topic_id: "t", vault: v },
       )) {
         out.push(it);
@@ -38,7 +38,7 @@ describe("fromDocument seeds-only", () => {
       );
       const out: any[] = [];
       for await (const it of fromDocument.discover(
-        { type: "from-document", path: doc, mode: "seeds-only", refetch: false } as any,
+        { type: "from-document", path: doc } as any,
         { topic_id: "t", vault: v },
       )) {
         out.push(it);
@@ -55,29 +55,12 @@ describe("fromDocument seeds-only", () => {
       writeFileSync(join(v, "rel.md"), "https://r.com/a");
       const out: any[] = [];
       for await (const it of fromDocument.discover(
-        { type: "from-document", path: "rel.md", mode: "seeds-only", refetch: false } as any,
+        { type: "from-document", path: "rel.md" } as any,
         { topic_id: "t", vault: v },
       )) {
         out.push(it);
       }
       expect(out.map(o => o.url)).toEqual(["https://r.com/a"]);
-    } finally {
-      rmSync(v, { recursive: true, force: true });
-    }
-  });
-
-  it("yields nothing for use-as-cards mode (handled at pipeline level)", async () => {
-    const v = mkdtempSync(join(tmpdir(), "v-"));
-    try {
-      writeFileSync(join(v, "doc.md"), "https://x.com/a");
-      const out: any[] = [];
-      for await (const it of fromDocument.discover(
-        { type: "from-document", path: join(v, "doc.md"), mode: "use-as-cards", refetch: false } as any,
-        { topic_id: "t", vault: v },
-      )) {
-        out.push(it);
-      }
-      expect(out).toEqual([]);
     } finally {
       rmSync(v, { recursive: true, force: true });
     }

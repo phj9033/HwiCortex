@@ -1,13 +1,15 @@
 ---
 name: research-pre
-description: Prepare or top up sources for a research topic. Triggered when the user says "리서치 준비", "<topic> 자료 모아", or similar. Always asks for confirmation before running fetch.
+description: Gather sources for a research topic. Triggered by "리서치 준비", "<topic> 자료 모아", or similar. Runs hwicortex CLI for HTTP fetch only — card generation is research-build's job.
 user_invocable: true
 ---
 
-# Research Pre — 리서치 자료 수집
+# Research Pre — 자료 수집 (fetch만)
 
-`hwicortex research fetch`를 호출하여 토픽의 소스를 수집·카드화한다.
-**자동 실행 금지.** 항상 사용자 승인 후 실행.
+이 스킬은 `hwicortex research fetch`로 **HTTP fetch + 추출 + raw.jsonl 적재**만 수행한다.
+LLM 호출이 아예 없다 (fetch 단계는 카드를 만들지 않음).
+
+카드 생성은 별도 단계 — research-build 스킬이 raw 레코드를 읽고 어시스턴트가 직접 작성한다.
 
 ## 트리거
 
@@ -16,11 +18,7 @@ user_invocable: true
 
 ## Process
 
-1. **토픽 식별**
-   - 인자가 토픽 id처럼 보이면 (`^[a-z0-9-]+$`) 그대로 사용.
-   - 자연어 프롬프트면 ad-hoc 토픽 처리 (`hwicortex research fetch <prompt>` 자체로 처리됨).
-
-2. **토픽 확인 또는 신규 생성**
+1. **토픽 식별 + 확인**
    ```bash
    hwicortex research topic show <id>
    ```
@@ -29,23 +27,27 @@ user_invocable: true
    hwicortex research topic new <id> --from-prompt "<intent>"
    ```
 
-3. **계획 표시 + 승인 대기**
-   - 등록된 sources 목록, queries, budget caps을 보여준다.
-   - "이대로 fetch 실행할까요?"
+2. **계획 표시 + 승인 대기**
+   - 등록된 sources, queries, budget caps을 보여준다.
+   - "이대로 fetch 실행할까요? (LLM 호출 없음, HTTP fetch만)"
 
-4. **실행**
+3. **실행**
    ```bash
-   hwicortex research fetch <id> [--max-new N] [--source <type>] [--no-cards]
+   hwicortex research fetch <id> [--max-new N] [--source <type>]
    ```
 
-5. **결과 요약**
+4. **결과 요약**
    ```
-   Fetched M/N (skipped X, errored Y); +Z records. Cost: $A.AAAA
+   Fetched M/N (skipped X, errored Y); +Z records.
    ```
+   raw 레코드는 `<vault>/research/_staging/<id>/raw.jsonl`에 누적 (idempotent).
+
+5. **다음 단계 안내**
+   "카드를 작성하려면 `/research-build <id>`를 호출하세요. 이 세션에서 제가 raw 레코드를 읽고 카드 마크다운을 직접 작성합니다."
 
 ## Rules
 
 - `hwicortex research fetch`를 자동 실행하지 마라 — 항상 승인 대기.
-- 카드 생성을 끄고 fetch만 하고 싶으면 `--no-cards` 명시.
 - 비용이 예산을 초과할 가능성이 있으면 `--max-new`로 제한 제안.
 - 결과는 `<vault>/research/_staging/<id>/raw.jsonl`에 누적된다 (idempotent).
+- **이 스킬은 LLM 호출을 하지 않는다.** 카드/합성/초안은 research-build, research-draft 스킬이 어시스턴트의 작업으로 처리.

@@ -2,9 +2,7 @@ import { parseArgs } from "util";
 import { readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
 import { fetchTopic } from "../research/pipeline/fetch.js";
-import { synthesize } from "../research/pipeline/synthesize.js";
-import { draft, defaultDraftDbPath } from "../research/pipeline/draft.js";
-import type { DraftStyle } from "../research/llm/draft.js";
+import { searchTopic, defaultDraftDbPath } from "../research/pipeline/draft.js";
 import { loadTopic, adhocTopicFromPrompt } from "../research/topic/loader.js";
 import { scaffoldTopic, listTopicIds } from "../research/topic/scaffold.js";
 import { computeStatus } from "../research/pipeline/status.js";
@@ -25,11 +23,8 @@ export async function runResearchCli(argv: string[]): Promise<void> {
     case "fetch":
       await runFetch(rest);
       return;
-    case "synthesize":
-      await runSynthesize(rest);
-      return;
-    case "draft":
-      await runDraft(rest);
+    case "search":
+      await runSearch(rest);
       return;
     case "topic":
       await runTopic(rest);
@@ -42,7 +37,9 @@ export async function runResearchCli(argv: string[]): Promise<void> {
       return;
     default:
       console.error(
-        "usage: hwicortex research <fetch|synthesize|draft|topic|import|status> ...",
+        "usage: hwicortex research <fetch|search|topic|import|status> ...\n" +
+          "  Synthesis and draft writing are now agent-driven; see\n" +
+          "  docs/research/agent-guide.md and the /research-build / /research-draft skills.",
       );
       process.exitCode = 1;
   }
@@ -55,7 +52,6 @@ async function runFetch(argv: string[]): Promise<void> {
     options: {
       refresh: { type: "boolean", default: false },
       "max-new": { type: "string" },
-      "no-cards": { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       source: { type: "string" },
       vault: { type: "string" },
@@ -98,7 +94,6 @@ async function runFetch(argv: string[]): Promise<void> {
     config,
     refresh: values["refresh"],
     maxNew: values["max-new"] ? Number(values["max-new"]) : undefined,
-    cardsEnabled: !values["no-cards"],
     source,
     dryRun: values["dry-run"],
   });
@@ -107,130 +102,54 @@ async function runFetch(argv: string[]): Promise<void> {
     process.stdout.write(JSON.stringify(r, null, 2) + "\n");
   } else {
     process.stdout.write(
-      `Fetched ${r.fetched}/${r.discovered} (skipped ${r.skipped}, errored ${r.errored}); +${r.records_added} records.\n` +
-        `Cost: $${r.budget.cost_usd_total.toFixed(4)}\n`,
+      `Fetched ${r.fetched}/${r.discovered} (skipped ${r.skipped}, errored ${r.errored}); +${r.records_added} records.\n`,
     );
   }
 }
 
-async function runSynthesize(argv: string[]): Promise<void> {
+async function runSearch(argv: string[]): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
     allowPositionals: true,
     options: {
-      subtopic: { type: "string" },
-      refresh: { type: "boolean", default: false },
-      model: { type: "string" },
-      vault: { type: "string" },
-      json: { type: "boolean", default: false },
-    },
-  });
-
-  const target = positionals[0];
-  if (!target) {
-    console.error("usage: hwicortex research synthesize <topic-id|prompt>");
-    process.exitCode = 1;
-    return;
-  }
-
-  const vault = values.vault ?? loadVaultPath();
-  const config = loadResearchConfig();
-  const synthModel = values.model ?? config.models.synth;
-
-  let topic;
-  try {
-    topic = await loadTopic(target, vault);
-  } catch {
-    topic = adhocTopicFromPrompt(target);
-  }
-
-  const r = await synthesize({
-    topic,
-    vault,
-    config: { models: { synth: synthModel } },
-    subtopic: values.subtopic,
-    refresh: values.refresh,
-  });
-
-  if (values.json) {
-    process.stdout.write(JSON.stringify(r, null, 2) + "\n");
-  } else {
-    process.stdout.write(
-      `Wrote ${r.notes_written.length} synthesis note(s).\n` +
-        `Cost: $${r.cost_usd.toFixed(4)}\n`,
-    );
-  }
-}
-
-async function runDraft(argv: string[]): Promise<void> {
-  const { values, positionals } = parseArgs({
-    args: argv,
-    allowPositionals: true,
-    options: {
-      prompt: { type: "string" },
-      slug: { type: "string" },
+      query: { type: "string" },
       "top-k": { type: "string" },
       "include-vault": { type: "boolean", default: false },
-      style: { type: "string" },
-      model: { type: "string" },
-      "require-context": { type: "boolean", default: false },
       vault: { type: "string" },
       "db-path": { type: "string" },
       json: { type: "boolean", default: false },
     },
   });
-
-  const target = positionals[0];
-  if (!target) {
-    console.error("usage: hwicortex research draft <topic-id|prompt> --prompt <text>");
+  const id = positionals[0];
+  if (!id || !values.query) {
+    console.error("usage: hwicortex research search <topic-id> --query <text> [--top-k N] [--include-vault]");
     process.exitCode = 1;
-    return;
-  }
-  if (!values.prompt) {
-    console.error("--prompt is required");
-    process.exitCode = 2;
-    return;
-  }
-
-  const styleVal = values.style as string | undefined;
-  if (styleVal && !["blog", "report", "qa"].includes(styleVal)) {
-    console.error("--style must be one of: blog, report, qa");
-    process.exitCode = 2;
     return;
   }
 
   const vault = values.vault ?? loadVaultPath();
-  const config = loadResearchConfig();
-  const draftModel = values.model ?? config.models.draft;
-
-  let topic;
-  try {
-    topic = await loadTopic(target, vault);
-  } catch {
-    topic = adhocTopicFromPrompt(target);
-  }
-
-  const r = await draft({
+  const topic = await loadTopic(id, vault);
+  const r = await searchTopic({
     topic,
     vault,
-    prompt: values.prompt,
-    slug: values.slug,
+    query: values.query,
     topK: values["top-k"] ? Number(values["top-k"]) : undefined,
     includeVault: values["include-vault"],
-    style: styleVal as DraftStyle | undefined,
-    model: draftModel,
     dbPath: values["db-path"] ?? defaultDraftDbPath(vault, topic.id),
-    requireContext: values["require-context"],
   });
 
   if (values.json) {
-    process.stdout.write(JSON.stringify(r, null, 2) + "\n");
+    // Strip the verbose hits payload from the default JSON; agents that need
+    // raw hits can re-run with --json --raw (not yet implemented) or use the SDK.
+    process.stdout.write(JSON.stringify({ context: r.context }, null, 2) + "\n");
   } else {
-    process.stdout.write(
-      `Wrote ${r.path}\n` +
-        `Cited: ${r.cited.length} source(s)\n` +
-        `Cost: $${r.cost_usd.toFixed(4)}\n`,
-    );
+    if (r.context.length === 0) {
+      process.stdout.write("(no context hits)\n");
+    } else {
+      for (const c of r.context) {
+        process.stdout.write(`- [${c.source_id}] ${c.title} — ${c.path}\n`);
+      }
+    }
   }
 }
 
@@ -257,7 +176,6 @@ async function runStatus(argv: string[]): Promise<void> {
     process.stdout.write(
       `topic: ${s.topic_id}\n` +
         `raw=${s.raw_records} cards=${s.cards} notes=${s.synthesis_notes} drafts=${s.drafts}\n` +
-        `cost=$${s.cost_usd.toFixed(4)}\n` +
         `last=${s.last_event_ts ?? "(none)"}\n`,
     );
   }
@@ -268,8 +186,6 @@ async function runImport(argv: string[]): Promise<void> {
     args: argv,
     allowPositionals: true,
     options: {
-      mode: { type: "string", default: "seeds-only" },
-      refetch: { type: "boolean", default: false },
       vault: { type: "string" },
       json: { type: "boolean", default: false },
     },
@@ -278,15 +194,9 @@ async function runImport(argv: string[]): Promise<void> {
   const [topicId, docPath] = positionals;
   if (!topicId || !docPath) {
     console.error(
-      "usage: hwicortex research import <topic-id> <doc-path> [--mode seeds-only|use-as-cards] [--refetch]",
+      "usage: hwicortex research import <topic-id> <doc-path>",
     );
     process.exitCode = 1;
-    return;
-  }
-  const mode = values.mode as string;
-  if (mode !== "seeds-only" && mode !== "use-as-cards") {
-    console.error("--mode must be one of: seeds-only, use-as-cards");
-    process.exitCode = 2;
     return;
   }
 
@@ -306,12 +216,7 @@ async function runImport(argv: string[]): Promise<void> {
     ...topic,
     sources: [
       ...topic.sources,
-      {
-        type: "from-document" as const,
-        path: docPath,
-        mode: mode as "seeds-only" | "use-as-cards",
-        refetch: values.refetch,
-      },
+      { type: "from-document" as const, path: docPath },
     ],
   };
 
@@ -326,7 +231,7 @@ async function runImport(argv: string[]): Promise<void> {
     process.stdout.write(JSON.stringify(r, null, 2) + "\n");
   } else {
     process.stdout.write(
-      `Imported from ${docPath} (mode=${mode}): +${r.records_added} records, ${r.fetched}/${r.discovered} fetched.\n`,
+      `Imported from ${docPath}: +${r.records_added} records, ${r.fetched}/${r.discovered} fetched.\n`,
     );
   }
 }
@@ -438,14 +343,8 @@ function loadResearchConfig(): ResearchConfig {
     budget: {
       max_new_urls: r.budget?.max_new_urls ?? 100,
       max_total_bytes: r.budget?.max_total_bytes ?? 50_000_000,
-      max_llm_cost_usd: r.budget?.max_llm_cost_usd ?? 0.5,
     },
     search: r.search,
-    models: {
-      card: r.models?.card ?? "claude-haiku-4-5",
-      synth: r.models?.synth ?? "claude-sonnet-4-6",
-      draft: r.models?.draft ?? "claude-sonnet-4-6",
-    },
   };
 }
 
