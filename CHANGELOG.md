@@ -4,10 +4,10 @@
 
 ### Added
 
-- `hwicortex research` subcommand: end-to-end web research → curated cards → synthesis → grounded drafts. Subcommands: `fetch`, `synthesize`, `draft`, `topic new/list/show`, `import`, `status`.
-- New module `src/research/` with adapter-based discovery (web-search/arxiv/rss/seed-urls/from-document), HTML+PDF extraction, body-hash idempotent cards via Haiku, cluster auto-naming + synthesis notes via Sonnet, and SDK-grounded RAG drafts with `[^source_id]` footnotes.
-- Anthropic tool-use definitions (`research_fetch`, `research_synthesize`, `research_draft`, `research_topic_show`, `research_topic_list`, `research_status`) and slash skills (`/research-pre`, `/research-build`, `/research-draft`, `/research-tidy`) for agent integration. Skills require explicit user approval before running automation.
-- SDK namespace: `import { research } from "hwicortex"` exposes pipeline functions, topic helpers, and the agent tools.
+- `hwicortex research` subcommand: agent-driven research pipeline. hwicortex handles HTTP fetch + extraction + staging + RAG search; the calling agent handles all LLM work (card writing, cluster planning, synthesis, drafts) using its own LLM access. Subcommands: `fetch`, `search`, `topic new/list/show`, `import`, `status`. **No ANTHROPIC_API_KEY required by hwicortex itself.**
+- New module `src/research/` with adapter-based discovery (web-search/arxiv/rss/seed-urls/from-document), HTML+PDF extraction, body-hash-keyed staging, and per-topic SDK store for RAG context retrieval. SDK exports (`writeCard`, `writeSynthesis`, `writeDraftFile`, `readCardFrontmatter`) let an agent persist content it has generated.
+- Anthropic tool-use definitions (`research_fetch`, `research_search`, `research_topic_show`, `research_topic_list`, `research_status`) and slash skills (`/research-pre`, `/research-build`, `/research-draft`, `/research-tidy`, `/research-launch-headless`) for agent integration. Skills require explicit user approval before running.
+- SDK namespace: `import { research } from "hwicortex"` exposes the pipeline primitives, topic helpers, and the agent tools.
 - `wiki list --json` outputs full WikiMeta fields as JSON array (filePath excluded)
 - `update --embed` flag runs embedding automatically after index update
 - Knowledge loop skills: `/knowledge-pre` (작업 전 지식 검색), `/knowledge-post` (작업 후 지식 저장), `/knowledge-ingest` (세션 배치 처리), `/knowledge-tidy` (지식 정리)
