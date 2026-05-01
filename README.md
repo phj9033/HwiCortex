@@ -219,6 +219,8 @@ hwicortex research draft rag-eval --prompt "Survey current RAG evaluation method
 
 상태 확인은 `hwicortex research status <topic-id>`. 에이전트 통합용 도구 정의는 `import { research } from "hwicortex"`로 노출된다 (`research.researchTools`, `research.executeResearchTool`). 슬래시 스킬: `/research-pre`, `/research-build`, `/research-draft`, `/research-tidy`.
 
+외부 AI 에이전트 / MCP 호스트가 이 CLI를 자식 프로세스로 호출하는 경우 가이드: [`docs/research/agent-guide.md`](docs/research/agent-guide.md).
+
 설계 문서: `docs/superpowers/plans/2026-04-30-research-to-draft.md`.
 
 ## 개발
