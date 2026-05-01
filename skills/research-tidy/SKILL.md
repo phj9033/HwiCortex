@@ -23,8 +23,8 @@ user_invocable: true
    - `raw_records`, `cards`, `synthesis_notes`, `drafts`, `cost_usd`, 최근 이벤트 10개를 보여준다.
 
 2. **이상 징후 체크**
-   - `cards == 0` && `raw_records > 0` → fetch 시 카드 비활성화됐을 가능성.
-   - `synthesis_notes == 0` && `cards > 0` → research-build 권장.
+   - `cards == 0` && `raw_records > 0` → fetch 후 research-build로 카드 작성을 안 한 상태. research-build 권장.
+   - `synthesis_notes == 0` && `cards > 0` → research-build의 합성 단계 미실행. 권장.
    - `_staging/<id>/raw.jsonl`이 매우 크면 (>50MB) 정리 후보.
 
 3. **정리 제안 (사용자 확인 필수)**
