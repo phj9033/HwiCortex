@@ -103,6 +103,35 @@ describe("fetchTopic (slice 1)", () => {
     expect(r.fetched).toBe(0);
   });
 
+  it("from-document use-as-cards mode writes synthetic records and cards", async () => {
+    const { writeFileSync, mkdirSync } = await import("fs");
+    mkdirSync(join(vault, "research", "notes"), { recursive: true });
+    const docPath = join(vault, "doc.md");
+    writeFileSync(
+      docPath,
+      "Notes on RAG.\n\n- Look at https://a.com/x for survey.\n- See also https://b.com/y for benchmarks.",
+    );
+    const topic = parseTopic({
+      id: "t-doc",
+      title: "from-doc",
+      sources: [{ type: "from-document", path: docPath, mode: "use-as-cards", refetch: false }],
+    });
+    const llm = mockLlm([
+      JSON.stringify([
+        { url: "https://a.com/x", title: "Survey", summary: "RAG survey paper.", excerpts: ["Look at https://a.com/x for survey"] },
+        { url: "https://b.com/y", summary: "Benchmark suite." },
+      ]),
+    ]);
+    const r = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
+    expect(r.records_added).toBe(2);
+    // Cards exist
+    const fmA = readCardFrontmatter(cardPath(vault, "t-doc", JSON.parse(
+      readFileSync(join(vault, "research", "_staging", "t-doc", "raw.jsonl"), "utf-8")
+        .trim().split("\n")[0],
+    ).id));
+    expect(fmA?.body_hash).toBeTruthy();
+  });
+
   it("writes a card via mock LLM and is idempotent on rerun", async () => {
     const topic = parseTopic({
       id: "t-card",

@@ -20,9 +20,12 @@ import { fromDocument } from "../sources/from-document.js";
 import type { Discovery } from "../sources/types.js";
 import type { TopicSpec, SourceSpec } from "../topic/schema.js";
 import { createAnthropicClient, type LlmClient } from "../llm/client.js";
-import { buildCard } from "../llm/card.js";
+import { buildCard, substringMatchesNormalized } from "../llm/card.js";
+import { extractCardsFromDocument } from "../llm/from-document-extract.js";
 import { writeCard, cardPath, readCardFrontmatter } from "../store/cards.js";
 import type { RawRecord } from "../core/types.js";
+import { readFileSync } from "fs";
+import { isAbsolute, join as joinPath } from "path";
 
 export type ResearchConfig = {
   fetch: {
@@ -125,6 +128,73 @@ export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
 
   for (const spec of topic.sources) {
     if (opts.source && spec.type !== opts.source) continue;
+
+    if (spec.type === "from-document" && spec.mode === "use-as-cards") {
+      const docPath = isAbsolute(spec.path) ? spec.path : joinPath(vault, spec.path);
+      const docText = readFileSync(docPath, "utf-8");
+      const llm = opts._llmClient ?? createAnthropicClient();
+      const out = await extractCardsFromDocument(llm, docText, topic.cards.model);
+      if (out.cost_usd > 0 && !budget.tryAddCost(topic.cards.model, out.cost_usd)) {
+        log.emit({ kind: "budget_halt", reason: "max_llm_cost_usd" });
+        return summary();
+      }
+      if (!out.items.length && out.reason) {
+        log.emit({ kind: "card_skip", source_id: spec.path, reason: out.reason });
+      }
+      for (const item of out.items) {
+        discovered += 1;
+        const cu = canonicalize(item.url);
+        if (staging.has({ canonical_url: cu })) {
+          skipped += 1;
+          continue;
+        }
+        if (!budget.tryAddUrl()) {
+          log.emit({ kind: "budget_halt", reason: "max_new_urls" });
+          return summary();
+        }
+        const sid = sourceIdFor(cu);
+        const synth: RawRecord = {
+          id: sid,
+          topic_id: topic.id,
+          source_type: "from-document",
+          url: item.url,
+          canonical_url: cu,
+          title: item.title ?? null,
+          author: null,
+          published_at: null,
+          fetched_at: new Date().toISOString(),
+          content_type: "html",
+          language: null,
+          body_md: item.summary,
+          word_count: item.summary.split(/\s+/).filter(Boolean).length,
+          body_hash: bodyHash(item.summary),
+          source_meta: { adapter: "from-document", document: spec.path, mode: "use-as-cards" },
+          cache_blob: null,
+        };
+        staging.append(synth);
+        recordsAdded += 1;
+        const verifiedExcerpts = (item.excerpts ?? []).filter(q =>
+          substringMatchesNormalized(q, docText),
+        );
+        writeCard(vault, {
+          source_id: sid,
+          topic_id: topic.id,
+          url: item.url,
+          title: item.title ?? "(untitled)",
+          author: null,
+          published: null,
+          fetched: synth.fetched_at,
+          language: null,
+          tags: [],
+          body_hash: synth.body_hash,
+          tldr: [item.summary.slice(0, 200)],
+          excerpts: verifiedExcerpts,
+        });
+        log.emit({ kind: "card_ok", source_id: sid });
+      }
+      continue;
+    }
+
     const adapter = registry[spec.type];
     if (!adapter) {
       log.emit({ kind: "fetch_skip", url: spec.type, reason: "no_adapter" });
