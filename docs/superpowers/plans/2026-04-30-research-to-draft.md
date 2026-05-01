@@ -16,10 +16,10 @@
 
 _Last updated: 2026-05-01_
 
-- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (33 commits ahead of `main`)
-- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3), Phase E (E1–E6)
-- **Resume from:** Phase F — Task F1 (Synthesis prompt + cluster auto-naming, plan line ~2811)
-- **All research tests:** 78/78 PASS via `npx vitest run test/research/` (~950ms)
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (37 commits ahead of `main`)
+- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3), Phase E (E1–E6), Phase F (F1–F2)
+- **Resume from:** Phase G — Task G1 (Draft prompt + writer, plan line ~3050)
+- **All research tests:** 91/91 PASS via `npx vitest run test/research/` (~1.03s)
 - **Notes for next session:**
   - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
   - Intentional plan deviations on this branch (all documented in commit messages):
