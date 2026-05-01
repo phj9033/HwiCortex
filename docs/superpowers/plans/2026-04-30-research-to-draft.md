@@ -16,10 +16,10 @@
 
 _Last updated: 2026-05-01_
 
-- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (37 commits ahead of `main`)
-- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3), Phase E (E1–E6), Phase F (F1–F2)
-- **Resume from:** Phase G — Task G1 (Draft prompt + writer, plan line ~3050)
-- **All research tests:** 91/91 PASS via `npx vitest run test/research/` (~1.03s)
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (40 commits ahead of `main`)
+- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3), Phase E (E1–E6), Phase F (F1–F2), Phase G (G1–G2)
+- **Resume from:** Phase H — Task H1 (Topic management CLI, plan line ~3245)
+- **All research tests:** 103/103 PASS via `npx vitest run test/research/` (~1.14s)
 - **Notes for next session:**
   - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
   - Intentional plan deviations on this branch (all documented in commit messages):
@@ -28,6 +28,7 @@ _Last updated: 2026-05-01_
     3. C5 early-dispatches `research` in `qmd.ts` before `parseCLI()` so research-specific flags don't pollute the global parser.
     4. D3 explicitly adds `cardsEnabled: false` to the existing slice-1 fetch tests so the default `topic.cards.enabled = true` doesn't trigger a real Anthropic client during those tests.
     5. E6 introduces `parsePdfBuffer()` in `src/ingest/pdf-parser.ts` (existing `PdfParser` only took a file path; pipeline needs an in-memory variant) and explicitly copies into a fresh `Uint8Array` because pdfjs rejects Node `Buffer` instances.
+    6. G2 adds a `_store: QMDStore` test seam to `pipeline/draft.ts` so tests can mock the SDK store; otherwise `store.embed()` would load the embedding model and overheat the machine. Mirrors the `_llmClient` seam already used by Phase D / E5 / F2.
 
 ---
 
