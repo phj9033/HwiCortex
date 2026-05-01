@@ -3,6 +3,8 @@ import { readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
 import { fetchTopic } from "../research/pipeline/fetch.js";
 import { synthesize } from "../research/pipeline/synthesize.js";
+import { draft, defaultDraftDbPath } from "../research/pipeline/draft.js";
+import type { DraftStyle } from "../research/llm/draft.js";
 import { loadTopic, adhocTopicFromPrompt } from "../research/topic/loader.js";
 import type { ResearchConfig } from "../research/pipeline/fetch.js";
 import type { SourceSpec } from "../research/topic/schema.js";
@@ -23,6 +25,9 @@ export async function runResearchCli(argv: string[]): Promise<void> {
       return;
     case "synthesize":
       await runSynthesize(rest);
+      return;
+    case "draft":
+      await runDraft(rest);
       return;
     default:
       console.error(
@@ -141,6 +146,78 @@ async function runSynthesize(argv: string[]): Promise<void> {
   } else {
     process.stdout.write(
       `Wrote ${r.notes_written.length} synthesis note(s).\n` +
+        `Cost: $${r.cost_usd.toFixed(4)}\n`,
+    );
+  }
+}
+
+async function runDraft(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      prompt: { type: "string" },
+      slug: { type: "string" },
+      "top-k": { type: "string" },
+      "include-vault": { type: "boolean", default: false },
+      style: { type: "string" },
+      model: { type: "string" },
+      "require-context": { type: "boolean", default: false },
+      vault: { type: "string" },
+      "db-path": { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+
+  const target = positionals[0];
+  if (!target) {
+    console.error("usage: hwicortex research draft <topic-id|prompt> --prompt <text>");
+    process.exitCode = 1;
+    return;
+  }
+  if (!values.prompt) {
+    console.error("--prompt is required");
+    process.exitCode = 2;
+    return;
+  }
+
+  const styleVal = values.style as string | undefined;
+  if (styleVal && !["blog", "report", "qa"].includes(styleVal)) {
+    console.error("--style must be one of: blog, report, qa");
+    process.exitCode = 2;
+    return;
+  }
+
+  const vault = values.vault ?? loadVaultPath();
+  const config = loadResearchConfig();
+  const draftModel = values.model ?? config.models.draft;
+
+  let topic;
+  try {
+    topic = await loadTopic(target, vault);
+  } catch {
+    topic = adhocTopicFromPrompt(target);
+  }
+
+  const r = await draft({
+    topic,
+    vault,
+    prompt: values.prompt,
+    slug: values.slug,
+    topK: values["top-k"] ? Number(values["top-k"]) : undefined,
+    includeVault: values["include-vault"],
+    style: styleVal as DraftStyle | undefined,
+    model: draftModel,
+    dbPath: values["db-path"] ?? defaultDraftDbPath(vault, topic.id),
+    requireContext: values["require-context"],
+  });
+
+  if (values.json) {
+    process.stdout.write(JSON.stringify(r, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      `Wrote ${r.path}\n` +
+        `Cited: ${r.cited.length} source(s)\n` +
         `Cost: $${r.cost_usd.toFixed(4)}\n`,
     );
   }
