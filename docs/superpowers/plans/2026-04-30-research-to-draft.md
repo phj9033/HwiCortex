@@ -16,10 +16,10 @@
 
 _Last updated: 2026-05-01_
 
-- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (40 commits ahead of `main`)
-- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3), Phase E (E1–E6), Phase F (F1–F2), Phase G (G1–G2)
-- **Resume from:** Phase H — Task H1 (Topic management CLI, plan line ~3245)
-- **All research tests:** 103/103 PASS via `npx vitest run test/research/` (~1.14s)
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (54 commits ahead of `main`)
+- **Done:** All phases A–J. **Plan complete.**
+- **Resume from:** N/A — branch is ready for review and merge to `main`. Task J2 (live smoke run) is intentionally deferred — see `docs/research/smoke-2026-04-30.md`.
+- **All research tests:** 124/124 PASS via `npx vitest run test/research/` (~1.86s)
 - **Notes for next session:**
   - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
   - Intentional plan deviations on this branch (all documented in commit messages):
