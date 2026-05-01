@@ -33,6 +33,9 @@ export async function runResearchCli(argv: string[]): Promise<void> {
     case "topic":
       await runTopic(rest);
       return;
+    case "import":
+      await runImport(rest);
+      return;
     default:
       console.error(
         "usage: hwicortex research <fetch|synthesize|draft|topic|import|status> ...",
@@ -223,6 +226,74 @@ async function runDraft(argv: string[]): Promise<void> {
       `Wrote ${r.path}\n` +
         `Cited: ${r.cited.length} source(s)\n` +
         `Cost: $${r.cost_usd.toFixed(4)}\n`,
+    );
+  }
+}
+
+async function runImport(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      mode: { type: "string", default: "seeds-only" },
+      refetch: { type: "boolean", default: false },
+      vault: { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+
+  const [topicId, docPath] = positionals;
+  if (!topicId || !docPath) {
+    console.error(
+      "usage: hwicortex research import <topic-id> <doc-path> [--mode seeds-only|use-as-cards] [--refetch]",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const mode = values.mode as string;
+  if (mode !== "seeds-only" && mode !== "use-as-cards") {
+    console.error("--mode must be one of: seeds-only, use-as-cards");
+    process.exitCode = 2;
+    return;
+  }
+
+  const vault = values.vault ?? loadVaultPath();
+  const config = loadResearchConfig();
+
+  let topic;
+  try {
+    topic = await loadTopic(topicId, vault);
+  } catch {
+    scaffoldTopic(vault, topicId);
+    topic = await loadTopic(topicId, vault);
+  }
+
+  // Append (in-memory only) a from-document source to drive this single run.
+  const augmented = {
+    ...topic,
+    sources: [
+      ...topic.sources,
+      {
+        type: "from-document" as const,
+        path: docPath,
+        mode: mode as "seeds-only" | "use-as-cards",
+        refetch: values.refetch,
+      },
+    ],
+  };
+
+  const r = await fetchTopic({
+    topic: augmented,
+    vault,
+    config,
+    source: "from-document",
+  });
+
+  if (values.json) {
+    process.stdout.write(JSON.stringify(r, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      `Imported from ${docPath} (mode=${mode}): +${r.records_added} records, ${r.fetched}/${r.discovered} fetched.\n`,
     );
   }
 }
