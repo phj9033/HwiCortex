@@ -7,6 +7,7 @@ import { draft, defaultDraftDbPath } from "../research/pipeline/draft.js";
 import type { DraftStyle } from "../research/llm/draft.js";
 import { loadTopic, adhocTopicFromPrompt } from "../research/topic/loader.js";
 import { scaffoldTopic, listTopicIds } from "../research/topic/scaffold.js";
+import { computeStatus } from "../research/pipeline/status.js";
 import type { ResearchConfig } from "../research/pipeline/fetch.js";
 import type { SourceSpec } from "../research/topic/schema.js";
 
@@ -35,6 +36,9 @@ export async function runResearchCli(argv: string[]): Promise<void> {
       return;
     case "import":
       await runImport(rest);
+      return;
+    case "status":
+      await runStatus(rest);
       return;
     default:
       console.error(
@@ -226,6 +230,35 @@ async function runDraft(argv: string[]): Promise<void> {
       `Wrote ${r.path}\n` +
         `Cited: ${r.cited.length} source(s)\n` +
         `Cost: $${r.cost_usd.toFixed(4)}\n`,
+    );
+  }
+}
+
+async function runStatus(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      vault: { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+  const id = positionals[0];
+  if (!id) {
+    console.error("usage: hwicortex research status <topic-id>");
+    process.exitCode = 1;
+    return;
+  }
+  const vault = values.vault ?? loadVaultPath();
+  const s = computeStatus(vault, id);
+  if (values.json) {
+    process.stdout.write(JSON.stringify(s, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      `topic: ${s.topic_id}\n` +
+        `raw=${s.raw_records} cards=${s.cards} notes=${s.synthesis_notes} drafts=${s.drafts}\n` +
+        `cost=$${s.cost_usd.toFixed(4)}\n` +
+        `last=${s.last_event_ts ?? "(none)"}\n`,
     );
   }
 }
