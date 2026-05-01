@@ -6,6 +6,7 @@ import { synthesize } from "../research/pipeline/synthesize.js";
 import { draft, defaultDraftDbPath } from "../research/pipeline/draft.js";
 import type { DraftStyle } from "../research/llm/draft.js";
 import { loadTopic, adhocTopicFromPrompt } from "../research/topic/loader.js";
+import { scaffoldTopic, listTopicIds } from "../research/topic/scaffold.js";
 import type { ResearchConfig } from "../research/pipeline/fetch.js";
 import type { SourceSpec } from "../research/topic/schema.js";
 
@@ -28,6 +29,9 @@ export async function runResearchCli(argv: string[]): Promise<void> {
       return;
     case "draft":
       await runDraft(rest);
+      return;
+    case "topic":
+      await runTopic(rest);
       return;
     default:
       console.error(
@@ -220,6 +224,94 @@ async function runDraft(argv: string[]): Promise<void> {
         `Cited: ${r.cited.length} source(s)\n` +
         `Cost: $${r.cost_usd.toFixed(4)}\n`,
     );
+  }
+}
+
+async function runTopic(argv: string[]): Promise<void> {
+  const [verb, ...rest] = argv;
+  switch (verb) {
+    case "new":
+      return runTopicNew(rest);
+    case "list":
+      return runTopicList(rest);
+    case "show":
+      return runTopicShow(rest);
+    default:
+      console.error("usage: hwicortex research topic <new|list|show> ...");
+      process.exitCode = 1;
+  }
+}
+
+async function runTopicNew(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      "from-prompt": { type: "string" },
+      vault: { type: "string" },
+    },
+  });
+  const id = positionals[0];
+  if (!id) {
+    console.error("usage: hwicortex research topic new <id> [--from-prompt \"...\"]");
+    process.exitCode = 1;
+    return;
+  }
+  const vault = values.vault ?? loadVaultPath();
+  try {
+    const path = scaffoldTopic(vault, id, values["from-prompt"]);
+    process.stdout.write(`Created ${path}\n`);
+  } catch (e: any) {
+    console.error(e.message);
+    process.exitCode = 2;
+  }
+}
+
+async function runTopicList(argv: string[]): Promise<void> {
+  const { values } = parseArgs({
+    args: argv,
+    allowPositionals: false,
+    options: {
+      vault: { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+  const vault = values.vault ?? loadVaultPath();
+  const ids = listTopicIds(vault);
+  if (values.json) {
+    process.stdout.write(JSON.stringify(ids, null, 2) + "\n");
+  } else {
+    if (ids.length === 0) process.stdout.write("(no topics)\n");
+    else for (const id of ids) process.stdout.write(id + "\n");
+  }
+}
+
+async function runTopicShow(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      vault: { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+  const id = positionals[0];
+  if (!id) {
+    console.error("usage: hwicortex research topic show <id>");
+    process.exitCode = 1;
+    return;
+  }
+  const vault = values.vault ?? loadVaultPath();
+  try {
+    const t = await loadTopic(id, vault);
+    process.stdout.write(
+      values.json
+        ? JSON.stringify(t, null, 2) + "\n"
+        : `id: ${t.id}\ntitle: ${t.title}\nsources: ${t.sources.length}\nbudget.max_new_urls: ${t.budget.max_new_urls}\n`,
+    );
+  } catch (e: any) {
+    console.error(e.message);
+    process.exitCode = 2;
   }
 }
 
