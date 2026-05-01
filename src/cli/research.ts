@@ -2,6 +2,7 @@ import { parseArgs } from "util";
 import { readFileSync } from "fs";
 import { parse as parseYaml } from "yaml";
 import { fetchTopic } from "../research/pipeline/fetch.js";
+import { synthesize } from "../research/pipeline/synthesize.js";
 import { loadTopic, adhocTopicFromPrompt } from "../research/topic/loader.js";
 import type { ResearchConfig } from "../research/pipeline/fetch.js";
 import type { SourceSpec } from "../research/topic/schema.js";
@@ -19,6 +20,9 @@ export async function runResearchCli(argv: string[]): Promise<void> {
   switch (sub) {
     case "fetch":
       await runFetch(rest);
+      return;
+    case "synthesize":
+      await runSynthesize(rest);
       return;
     default:
       console.error(
@@ -89,6 +93,55 @@ async function runFetch(argv: string[]): Promise<void> {
     process.stdout.write(
       `Fetched ${r.fetched}/${r.discovered} (skipped ${r.skipped}, errored ${r.errored}); +${r.records_added} records.\n` +
         `Cost: $${r.budget.cost_usd_total.toFixed(4)}\n`,
+    );
+  }
+}
+
+async function runSynthesize(argv: string[]): Promise<void> {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: {
+      subtopic: { type: "string" },
+      refresh: { type: "boolean", default: false },
+      model: { type: "string" },
+      vault: { type: "string" },
+      json: { type: "boolean", default: false },
+    },
+  });
+
+  const target = positionals[0];
+  if (!target) {
+    console.error("usage: hwicortex research synthesize <topic-id|prompt>");
+    process.exitCode = 1;
+    return;
+  }
+
+  const vault = values.vault ?? loadVaultPath();
+  const config = loadResearchConfig();
+  const synthModel = values.model ?? config.models.synth;
+
+  let topic;
+  try {
+    topic = await loadTopic(target, vault);
+  } catch {
+    topic = adhocTopicFromPrompt(target);
+  }
+
+  const r = await synthesize({
+    topic,
+    vault,
+    config: { models: { synth: synthModel } },
+    subtopic: values.subtopic,
+    refresh: values.refresh,
+  });
+
+  if (values.json) {
+    process.stdout.write(JSON.stringify(r, null, 2) + "\n");
+  } else {
+    process.stdout.write(
+      `Wrote ${r.notes_written.length} synthesis note(s).\n` +
+        `Cost: $${r.cost_usd.toFixed(4)}\n`,
     );
   }
 }
