@@ -407,6 +407,8 @@ async function runTopicShow(argv: string[]): Promise<void> {
 }
 
 function loadVaultPath(): string {
+  const env = process.env.QMD_VAULT_DIR;
+  if (env && env.length > 0) return expandHome(env);
   const cfg = loadConfigFile();
   const vp = cfg?.vault?.path as string | undefined;
   return expandHome(vp ?? "~/hwicortex-vault");
