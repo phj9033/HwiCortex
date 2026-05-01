@@ -4,15 +4,20 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { stringify as yamlStringify } from "yaml";
+import type { ResearchConfig } from "../../../src/research/pipeline/fetch.js";
+
+const cfg: ResearchConfig = {
+  fetch: { user_agent: "x", rate_limit_per_domain_qps: 1, timeout_ms: 1000, max_redirects: 5 },
+  budget: { max_new_urls: 1, max_total_bytes: 1 },
+};
 
 describe("researchTools array", () => {
-  it("contains all six tools with the expected names", () => {
+  it("contains the data-plumbing primitives only — no LLM-driven tools", () => {
     const names = researchTools.map(t => t.name).sort();
     expect(names).toEqual([
-      "research_draft",
       "research_fetch",
+      "research_search",
       "research_status",
-      "research_synthesize",
       "research_topic_list",
       "research_topic_show",
     ]);
@@ -24,10 +29,10 @@ describe("researchTools array", () => {
     expect(schema.required).toContain("topic_id");
   });
 
-  it("research_draft style enum is constrained to blog|report|qa", () => {
-    const t = researchTools.find(t => t.name === "research_draft")!;
-    const props = (t.input_schema as any).properties;
-    expect(props.style.enum).toEqual(["blog", "report", "qa"]);
+  it("research_search requires topic_id and query", () => {
+    const t = researchTools.find(t => t.name === "research_search")!;
+    const schema = t.input_schema as { required: string[] };
+    expect(schema.required.sort()).toEqual(["query", "topic_id"]);
   });
 });
 
@@ -41,14 +46,7 @@ describe("executeResearchTool dispatch", () => {
       const r = await executeResearchTool(
         "research_topic_list",
         {},
-        {
-          vault: v,
-          config: {
-            fetch: { user_agent: "x", rate_limit_per_domain_qps: 1, timeout_ms: 1000, max_redirects: 5 },
-            budget: { max_new_urls: 1, max_total_bytes: 1, max_llm_cost_usd: 0 },
-            models: { card: "h", synth: "s", draft: "d" },
-          },
-        },
+        { vault: v, config: cfg },
       );
       expect(JSON.parse(r.content).sort()).toEqual(["alpha", "beta"]);
     } finally {
@@ -67,14 +65,7 @@ describe("executeResearchTool dispatch", () => {
       const r = await executeResearchTool(
         "research_topic_show",
         { topic_id: "t1" },
-        {
-          vault: v,
-          config: {
-            fetch: { user_agent: "x", rate_limit_per_domain_qps: 1, timeout_ms: 1000, max_redirects: 5 },
-            budget: { max_new_urls: 1, max_total_bytes: 1, max_llm_cost_usd: 0 },
-            models: { card: "h", synth: "s", draft: "d" },
-          },
-        },
+        { vault: v, config: cfg },
       );
       const parsed = JSON.parse(r.content);
       expect(parsed.id).toBe("t1");
@@ -90,14 +81,7 @@ describe("executeResearchTool dispatch", () => {
       const r = await executeResearchTool(
         "research_status",
         { topic_id: "t1" },
-        {
-          vault: v,
-          config: {
-            fetch: { user_agent: "x", rate_limit_per_domain_qps: 1, timeout_ms: 1000, max_redirects: 5 },
-            budget: { max_new_urls: 1, max_total_bytes: 1, max_llm_cost_usd: 0 },
-            models: { card: "h", synth: "s", draft: "d" },
-          },
-        },
+        { vault: v, config: cfg },
       );
       const s = JSON.parse(r.content);
       expect(s.topic_id).toBe("t1");
