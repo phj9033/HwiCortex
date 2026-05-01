@@ -92,12 +92,14 @@ export async function writeSubtopicNote(
   } catch (e: any) {
     return { body_md: "", cited: [], cost_usd: 0, model, reason: "llm_error: " + (e?.message ?? "?") };
   }
-  const cited = Array.from(
-    new Set(
-      Array.from(res.text.matchAll(/\[\^([0-9a-f]{12})\]/g))
-        .map(m => m[1])
-        .filter((s): s is string => typeof s === "string"),
-    ),
-  );
+  const seen = new Set<string>();
+  const cited: string[] = [];
+  for (const m of res.text.matchAll(/\[\^([0-9a-f]{12})\]/g)) {
+    const id = m[1];
+    if (typeof id === "string" && !seen.has(id)) {
+      seen.add(id);
+      cited.push(id);
+    }
+  }
   return { body_md: res.text.trim(), cited, cost_usd: res.cost_usd, model };
 }
