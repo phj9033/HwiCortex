@@ -197,6 +197,30 @@ const results = await store.search({ query: "auth flow" });
 await store.close();
 ```
 
+## Research-to-Draft 파이프라인
+
+웹/arXiv/RSS/문서에서 출처를 수집하고, Haiku로 카드를 만들고, Sonnet으로 합성 노트와 인용을 갖춘 초안까지 자동 생성한다. 모든 산출물은 vault에 마크다운으로 저장되며, hwicortex 검색 인덱스로 다시 검색·인용할 수 있다.
+
+```sh
+# 1. 토픽 신규 생성 (또는 기존 토픽 사용)
+hwicortex research topic new rag-eval --from-prompt "Evaluating RAG systems"
+
+# 2. 자료 수집 + 카드 생성 (Haiku)
+hwicortex research fetch rag-eval --max-new 20
+
+# 3. subtopic 클러스터링 + 합성 노트 (Sonnet)
+hwicortex research synthesize rag-eval
+
+# 4. RAG 컨텍스트 기반 초안 작성 (Sonnet)
+hwicortex research draft rag-eval --prompt "Survey current RAG evaluation methods" --style report
+
+# 결과: <vault>/research/drafts/rag-eval/<YYYY-MM-DD>-survey-current-rag-evaluation.md
+```
+
+상태 확인은 `hwicortex research status <topic-id>`. 에이전트 통합용 도구 정의는 `import { research } from "hwicortex"`로 노출된다 (`research.researchTools`, `research.executeResearchTool`). 슬래시 스킬: `/research-pre`, `/research-build`, `/research-draft`, `/research-tidy`.
+
+설계 문서: `docs/superpowers/plans/2026-04-30-research-to-draft.md`.
+
 ## 개발
 
 ```sh

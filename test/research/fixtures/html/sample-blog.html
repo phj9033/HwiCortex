@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Designing a Local-First Search Index</title>
+  <meta name="author" content="Jane Doe">
+  <meta property="article:published_time" content="2025-12-01T00:00:00Z">
+</head>
+<body>
+  <header>
+    <nav><a href="/">Home</a> · <a href="/blog">Blog</a></nav>
+  </header>
+  <article>
+    <h1>Designing a Local-First Search Index</h1>
+    <p class="byline">By Jane Doe · December 1, 2025</p>
+
+    <p>When we set out to build a local-first search experience, we knew that
+    the conventional wisdom of shipping a hosted index would not scale to the
+    privacy and offline requirements our users had placed on the product. The
+    core constraint was simple to state but harder to satisfy: every query
+    should run end-to-end on the user's machine without leaving traces on a
+    remote service, and the index itself had to live alongside the documents
+    it described.</p>
+
+    <p>We landed on a hybrid retrieval design that combines a BM25 inverted
+    index with a vector index sharing the same SQLite database file. The
+    BM25 layer handles the lexical recall path: tokenize, stem, look up
+    posting lists, score with a length-normalized BM25 variant, and merge.
+    The vector layer covers the semantic-recall path: compute a small
+    embedding, find approximate neighbors with sqlite-vec, and feed those
+    neighbors into a reciprocal-rank fusion stage along with the BM25 hits.</p>
+
+    <p>One realization that drove a lot of the architecture was that for a
+    local-first product, ranking quality matters far more than raw retrieval
+    throughput. Most personal corpora are too small to need sharding or
+    parallel scoring, but they are heterogeneous enough that a single ranker
+    is rarely sufficient. We added a small reranker that runs the top-k
+    candidates through a lightweight scoring model before returning to the
+    user. This is cheap on modern hardware and pays for itself in
+    user-visible quality.</p>
+
+    <p>Chunking turned out to be the most underrated part of the system.
+    Splitting a document into roughly 900-token chunks with a 15% overlap,
+    while respecting markdown headings and code-fence boundaries, increased
+    NDCG more than any other single change. The lesson generalizes: the way
+    you cut the document is at least as important as the model you use to
+    embed it.</p>
+
+    <p>We also invested heavily in observability. Every query emits a trace
+    that records which lexical tokens fired, which vectors matched, what the
+    fusion weights looked like, and how the reranker reordered the top-k.
+    This trace is what makes the system maintainable: when a user reports a
+    bad answer, we can replay the trace and see exactly where retrieval went
+    wrong, instead of guessing at the symptom level.</p>
+
+    <p>If we were starting over today, the only thing we would change is
+    putting the trace pipeline in from the very first prototype. Everything
+    else — local SQLite, hybrid retrieval, opinionated chunking — has held
+    up well over the year that this system has been in production.</p>
+  </article>
+  <footer>
+    <p>© 2025</p>
+  </footer>
+</body>
+</html>

@@ -125,6 +125,9 @@ export { Maintenance } from "./maintenance.js";
 // Re-export AST utilities for SDK consumers
 export { getASTStatus } from "./ast.js";
 
+// Re-export research-to-draft pipeline as a namespace
+export * as research from "./research/index.js";
+
 /**
  * Progress info emitted during update() for each file processed.
  */

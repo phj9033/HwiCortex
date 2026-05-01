@@ -1,0 +1,167 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { setupServer } from "msw/node";
+import { http, HttpResponse } from "msw";
+import { mkdtempSync, readFileSync, mkdirSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { fetchTopic } from "../../../src/research/pipeline/fetch.js";
+import { parseTopic } from "../../../src/research/topic/schema.js";
+import { _resetRobotsCacheForTests } from "../../../src/research/core/robots.js";
+import { mockLlm } from "../_helpers/anthropic-mock.js";
+import { readCardFrontmatter, cardPath } from "../../../src/research/store/cards.js";
+
+const longBody = "lorem ipsum ".repeat(100);
+const HTML = `<html><head><title>T</title></head><body><article><h1>Title</h1><p>${longBody}</p></article></body></html>`;
+
+const server = setupServer(
+  http.get("https://e.com/robots.txt", () =>
+    HttpResponse.text("User-agent: *\nAllow: /\n"),
+  ),
+  http.get("https://e.com/a", () => HttpResponse.html(HTML)),
+);
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterAll(() => server.close());
+
+const cfg = {
+  fetch: {
+    user_agent: "test/0.1",
+    rate_limit_per_domain_qps: 100,
+    timeout_ms: 1000,
+    max_redirects: 5,
+  },
+  budget: {
+    max_new_urls: 10,
+    max_total_bytes: 10_000_000,
+    max_llm_cost_usd: 0.5,
+  },
+  models: {
+    card: "claude-haiku-4-5",
+    synth: "claude-sonnet-4-6",
+    draft: "claude-sonnet-4-6",
+  },
+};
+
+let vault: string;
+beforeEach(() => {
+  vault = mkdtempSync(join(tmpdir(), "v-"));
+  mkdirSync(join(vault, "research"), { recursive: true });
+  _resetRobotsCacheForTests();
+});
+afterEach(() => {
+  rmSync(vault, { recursive: true, force: true });
+});
+
+describe("fetchTopic (slice 1)", () => {
+  it("fetches a seed URL and writes a RawRecord", async () => {
+    const topic = parseTopic({
+      id: "t1",
+      title: "t1",
+      sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
+    });
+    const r = await fetchTopic({ topic, vault, config: cfg, cardsEnabled: false });
+    expect(r.records_added).toBe(1);
+    expect(r.fetched).toBe(1);
+    const raw = readFileSync(
+      join(vault, "research", "_staging", "t1", "raw.jsonl"),
+      "utf-8",
+    );
+    expect(raw).toContain('"canonical_url":"https://e.com/a"');
+  });
+
+  it("skips already-staged URLs on a second run", async () => {
+    const topic = parseTopic({
+      id: "t1",
+      title: "t1",
+      sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
+    });
+    await fetchTopic({ topic, vault, config: cfg, cardsEnabled: false });
+    const r = await fetchTopic({ topic, vault, config: cfg, cardsEnabled: false });
+    expect(r.records_added).toBe(0);
+    expect(r.skipped).toBe(1);
+  });
+
+  it("dryRun discovers without writing", async () => {
+    const topic = parseTopic({
+      id: "t1",
+      title: "t1",
+      sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
+    });
+    const r = await fetchTopic({ topic, vault, config: cfg, dryRun: true, cardsEnabled: false });
+    expect(r.records_added).toBe(0);
+    expect(r.fetched).toBe(1);
+  });
+
+  it("halts when max_new_urls reached (via opts.maxNew)", async () => {
+    const topic = parseTopic({
+      id: "t1",
+      title: "t1",
+      sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
+    });
+    const r = await fetchTopic({ topic, vault, config: cfg, maxNew: 0, cardsEnabled: false });
+    expect(r.records_added).toBe(0);
+    expect(r.fetched).toBe(0);
+  });
+
+  it("from-document use-as-cards mode writes synthetic records and cards", async () => {
+    const { writeFileSync, mkdirSync } = await import("fs");
+    mkdirSync(join(vault, "research", "notes"), { recursive: true });
+    const docPath = join(vault, "doc.md");
+    writeFileSync(
+      docPath,
+      "Notes on RAG.\n\n- Look at https://a.com/x for survey.\n- See also https://b.com/y for benchmarks.",
+    );
+    const topic = parseTopic({
+      id: "t-doc",
+      title: "from-doc",
+      sources: [{ type: "from-document", path: docPath, mode: "use-as-cards", refetch: false }],
+    });
+    const llm = mockLlm([
+      JSON.stringify([
+        { url: "https://a.com/x", title: "Survey", summary: "RAG survey paper.", excerpts: ["Look at https://a.com/x for survey"] },
+        { url: "https://b.com/y", summary: "Benchmark suite." },
+      ]),
+    ]);
+    const r = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
+    expect(r.records_added).toBe(2);
+    // Cards exist
+    const fmA = readCardFrontmatter(cardPath(vault, "t-doc", JSON.parse(
+      readFileSync(join(vault, "research", "_staging", "t-doc", "raw.jsonl"), "utf-8")
+        .trim().split("\n")[0],
+    ).id));
+    expect(fmA?.body_hash).toBeTruthy();
+  });
+
+  it("writes a card via mock LLM and is idempotent on rerun", async () => {
+    const topic = parseTopic({
+      id: "t-card",
+      title: "x",
+      sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
+      cards: { enabled: true, model: "claude-haiku-4-5" },
+    });
+    const llm = mockLlm([
+      JSON.stringify({
+        tldr: ["alpha bullet", "beta bullet", "gamma bullet"],
+        excerpts: [],
+        tags: ["rag"],
+      }),
+    ]);
+    const r1 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
+    expect(r1.records_added).toBe(1);
+    expect(r1.budget.cost_usd_total).toBeGreaterThan(0);
+
+    // Resolve actual source_id from staging, then verify card frontmatter body_hash matches
+    const raw = readFileSync(
+      join(vault, "research", "_staging", "t-card", "raw.jsonl"),
+      "utf-8",
+    );
+    const recObj = JSON.parse(raw.trim().split("\n")[0]);
+    const fm = readCardFrontmatter(cardPath(vault, "t-card", recObj.id));
+    expect(fm?.body_hash).toBe(recObj.body_hash);
+
+    // Second run: URL is already staged, so no new records and no LLM call
+    const r2 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
+    expect(r2.records_added).toBe(0);
+    expect(r2.skipped).toBe(1);
+  });
+});

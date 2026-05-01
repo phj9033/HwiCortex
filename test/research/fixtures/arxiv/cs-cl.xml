@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>arXiv Query: search_query=all:%22RAG%22+AND+%28cat:cs.CL%29&amp;start=0&amp;max_results=5</title>
+  <id>http://arxiv.org/api/example1</id>
+  <updated>2026-04-30T00:00:00Z</updated>
+  <opensearch:totalResults xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">3</opensearch:totalResults>
+  <entry>
+    <id>http://arxiv.org/abs/2401.12345v1</id>
+    <updated>2024-01-15T10:00:00Z</updated>
+    <published>2024-01-15T10:00:00Z</published>
+    <title>Retrieval-Augmented Generation: A Survey</title>
+    <summary>This paper surveys recent advances in RAG.</summary>
+    <author><name>Alice Researcher</name></author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2402.67890v2</id>
+    <updated>2024-02-20T08:30:00Z</updated>
+    <published>2024-02-20T08:30:00Z</published>
+    <title>Improving RAG with
+       hybrid search</title>
+    <summary>We propose a hybrid lexical+vector retrieval scheme.</summary>
+    <author><name>Bob Scholar</name></author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2403.11111v1</id>
+    <updated>2024-03-05T12:00:00Z</updated>
+    <published>2024-03-05T12:00:00Z</published>
+    <title>Long-context RAG benchmarks</title>
+    <summary>A new benchmark for long-context RAG evaluation.</summary>
+    <author><name>Carol Author</name></author>
+  </entry>
+</feed>

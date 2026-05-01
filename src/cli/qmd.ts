@@ -2957,6 +2957,14 @@ if (isMain) {
     setDeferNativeDispose(true);
   }
 
+  // The `research` subtree owns its own argv parsing (its options would
+  // clutter the global parser), so dispatch before parseCLI runs.
+  if (process.argv[2] === "research") {
+    const { runResearchCli } = await import("./research.js");
+    await runResearchCli(process.argv.slice(3));
+    process.exit(process.exitCode ?? 0);
+  }
+
   const cli = parseCLI();
 
   if (cli.values.version) {

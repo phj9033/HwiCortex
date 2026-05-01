@@ -1,0 +1,17 @@
+{
+  "query": { "original": "RAG evaluation" },
+  "web": {
+    "results": [
+      {
+        "title": "Evaluating RAG: A Practical Guide",
+        "url": "https://example.com/rag-eval-guide",
+        "description": "How to measure retrieval quality in RAG pipelines."
+      },
+      {
+        "title": "Benchmarks for RAG systems",
+        "url": "https://example.org/rag-benchmarks",
+        "description": "Open benchmarks comparing retrieval strategies."
+      }
+    ]
+  }
+}

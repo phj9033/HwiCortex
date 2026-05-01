@@ -12,6 +12,26 @@
 
 ---
 
+## Progress
+
+_Last updated: 2026-05-01_
+
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (54 commits ahead of `main`)
+- **Done:** All phases A–J. **Plan complete.**
+- **Resume from:** N/A — branch is ready for review and merge to `main`. Task J2 (live smoke run) is intentionally deferred — see `docs/research/smoke-2026-04-30.md`.
+- **All research tests:** 124/124 PASS via `npx vitest run test/research/` (~1.86s)
+- **Notes for next session:**
+  - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
+  - Intentional plan deviations on this branch (all documented in commit messages):
+    1. `robots.ts`, `arxiv.ts`, `web-search.ts` use native `fetch()` instead of `undici.request` (MSW compat; `undici` is not a dep on this branch).
+    2. C2 / E1 / E3 fixtures are synthesised, not captured real-world responses.
+    3. C5 early-dispatches `research` in `qmd.ts` before `parseCLI()` so research-specific flags don't pollute the global parser.
+    4. D3 explicitly adds `cardsEnabled: false` to the existing slice-1 fetch tests so the default `topic.cards.enabled = true` doesn't trigger a real Anthropic client during those tests.
+    5. E6 introduces `parsePdfBuffer()` in `src/ingest/pdf-parser.ts` (existing `PdfParser` only took a file path; pipeline needs an in-memory variant) and explicitly copies into a fresh `Uint8Array` because pdfjs rejects Node `Buffer` instances.
+    6. G2 adds a `_store: QMDStore` test seam to `pipeline/draft.ts` so tests can mock the SDK store; otherwise `store.embed()` would load the embedding model and overheat the machine. Mirrors the `_llmClient` seam already used by Phase D / E5 / F2.
+
+---
+
 ## File Structure
 
 ### New files (`src/research/`)
