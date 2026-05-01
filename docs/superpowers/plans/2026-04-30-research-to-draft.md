@@ -14,15 +14,15 @@
 
 ## Progress
 
-_Last updated: 2026-04-30_
+_Last updated: 2026-05-01_
 
-- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (11 commits ahead of `main`)
-- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5)
-- **Resume from:** Phase D — Task D1 (Card prompt + parser, plan line ~2002)
-- **All research tests:** 49/49 PASS via `npx vitest run test/research/` (~720ms)
+- **Branch / worktree:** `feat/research-pipeline` at `.worktrees/research-pipeline/` (26 commits ahead of `main`)
+- **Done:** Phase A (A0–A3), Phase B (B0–B8), Phase C (C1–C5), Phase D (D1–D3)
+- **Resume from:** Phase E — Task E1 (arxiv source, plan line ~2337)
+- **All research tests:** 58/58 PASS via `npx vitest run test/research/` (~760ms)
 - **Notes for next session:**
   - Memory overheats on full `npx vitest run test/` — restrict to `test/research/` during work.
-  - Two intentional plan deviations are documented in commit messages: `robots.ts` uses `fetch()` instead of `undici.request` (MSW compat + 5s timeout, exposes `_resetRobotsCacheForTests`); C2 uses synthesised article HTML fixtures instead of captured real-world pages.
+  - Three intentional plan deviations are documented in commit messages: `robots.ts` uses `fetch()` instead of `undici.request` (MSW compat + 5s timeout, exposes `_resetRobotsCacheForTests`); C2 uses synthesised article HTML fixtures instead of captured real-world pages; D3 explicitly adds `cardsEnabled: false` to the existing slice-1 fetch tests so the default `topic.cards.enabled = true` doesn't trigger a real Anthropic client during those tests.
   - C5 wires `research` via early-dispatch in `qmd.ts` (before `parseCLI()`) so research-specific flags don't pollute the global parser.
 
 ---
