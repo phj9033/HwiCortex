@@ -6,6 +6,7 @@ import { DomainRateLimiter } from "../core/rate-limit.js";
 import { FetchCache } from "../core/cache.js";
 import { fetchUrl, FetchError } from "../core/fetcher.js";
 import { htmlExtractor } from "../extractors/html.js";
+import { pdfExtractor } from "../extractors/pdf.js";
 import { StagingStore } from "../store/staging.js";
 import { RunLog } from "../store/log.js";
 import { seedUrls } from "../sources/seed-urls.js";
@@ -224,11 +225,16 @@ export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
           log.emit({ kind: "budget_halt", reason: "max_total_bytes" });
           return summary();
         }
-        if (doc.content_type !== "html") {
+        const ex = doc.content_type === "pdf"
+          ? await pdfExtractor.extract(doc)
+          : doc.content_type === "html"
+            ? await htmlExtractor.extract(doc)
+            : null;
+        if (!ex) {
           skipped += 1;
+          log.emit({ kind: "fetch_skip", url: cu, reason: `content_type:${doc.content_type}` });
           continue;
         }
-        const ex = await htmlExtractor.extract(doc);
         if (!ex.body_md) {
           skipped += 1;
           log.emit({ kind: "fetch_skip", url: cu, reason: "empty_body" });

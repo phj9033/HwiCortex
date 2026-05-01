@@ -9,6 +9,35 @@ export interface PdfParseResult {
   errorEntry?: string;
 }
 
+export async function parsePdfBuffer(buf: Buffer | Uint8Array): Promise<string> {
+  // pdfjs rejects Node Buffers (Buffer extends Uint8Array but has a different
+  // prototype). Always copy into a fresh Uint8Array.
+  const data = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength).slice();
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const doc = await pdfjsLib.getDocument({
+    data,
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+  }).promise;
+  try {
+    const pageTexts: string[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const tc = await page.getTextContent();
+      const pageText = tc.items
+        .filter((item): item is { str: string } & (typeof item) => "str" in item)
+        .map(item => item.str)
+        .join(" ")
+        .trim();
+      if (pageText) pageTexts.push(pageText);
+    }
+    return pageTexts.join("\n\n");
+  } finally {
+    doc.destroy();
+  }
+}
+
 export class PdfParser {
   async parse(filePath: string): Promise<PdfParseResult> {
     const absPath = resolve(filePath);
