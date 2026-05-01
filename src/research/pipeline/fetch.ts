@@ -10,6 +10,7 @@ import { StagingStore } from "../store/staging.js";
 import { RunLog } from "../store/log.js";
 import { seedUrls } from "../sources/seed-urls.js";
 import { arxivDiscovery } from "../sources/arxiv.js";
+import { rssDiscovery } from "../sources/rss.js";
 import type { Discovery } from "../sources/types.js";
 import type { TopicSpec, SourceSpec } from "../topic/schema.js";
 import { createAnthropicClient, type LlmClient } from "../llm/client.js";
@@ -62,8 +63,8 @@ export type FetchResult = {
 const REGISTRY: Partial<Record<SourceSpec["type"], Discovery>> = {
   "seed-urls": seedUrls,
   "arxiv": arxivDiscovery,
+  "rss": rssDiscovery,
   // Filled in Phase E:
-  // "rss": rssDiscovery,
   // "web-search": webSearchDiscovery,
   // "from-document": fromDocument,
 };
