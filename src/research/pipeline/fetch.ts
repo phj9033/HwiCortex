@@ -11,7 +11,10 @@ import { RunLog } from "../store/log.js";
 import { seedUrls } from "../sources/seed-urls.js";
 import type { Discovery } from "../sources/types.js";
 import type { TopicSpec, SourceSpec } from "../topic/schema.js";
-import type { LlmClient } from "../llm/client.js";
+import { createAnthropicClient, type LlmClient } from "../llm/client.js";
+import { buildCard } from "../llm/card.js";
+import { writeCard, cardPath, readCardFrontmatter } from "../store/cards.js";
+import type { RawRecord } from "../core/types.js";
 
 export type ResearchConfig = {
   fetch: {
@@ -153,7 +156,7 @@ export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
           skipped += 1;
           continue;
         }
-        staging.append({
+        const rec: RawRecord = {
           id: sourceIdFor(cu),
           topic_id: topic.id,
           source_type: spec.type,
@@ -170,10 +173,30 @@ export async function fetchTopic(opts: FetchOptions): Promise<FetchResult> {
           body_hash: hash,
           source_meta: item.source_meta ?? {},
           cache_blob: doc.cache_blob,
-        });
+        };
+        staging.append(rec);
         recordsAdded += 1;
         fetched += 1;
         log.emit({ kind: "fetch_ok", url: cu, bytes: doc.body_bytes.byteLength });
+
+        const cardsOn = (opts.cardsEnabled ?? true) && topic.cards.enabled;
+        if (cardsOn) {
+          const existing = readCardFrontmatter(cardPath(vault, topic.id, rec.id));
+          if (existing?.body_hash !== rec.body_hash) {
+            const llm = opts._llmClient ?? createAnthropicClient();
+            const out = await buildCard(llm, rec, topic.cards.model);
+            if (out.cost_usd > 0 && !budget.tryAddCost(topic.cards.model, out.cost_usd)) {
+              log.emit({ kind: "budget_halt", reason: "max_llm_cost_usd" });
+              return summary();
+            }
+            if (out.card) {
+              writeCard(vault, out.card);
+              log.emit({ kind: "card_ok", source_id: rec.id });
+            } else {
+              log.emit({ kind: "card_skip", source_id: rec.id, reason: out.reason ?? "unknown" });
+            }
+          }
+        }
       } catch (e: unknown) {
         errored += 1;
         const code = e instanceof FetchError ? e.code : "UNKNOWN";

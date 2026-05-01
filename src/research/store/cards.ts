@@ -12,7 +12,7 @@ export function readCardFrontmatter(path: string): { body_hash?: string } | null
   if (!existsSync(path)) return null;
   const txt = readFileSync(path, "utf-8");
   const m = txt.match(/^---\n([\s\S]*?)\n---/);
-  if (!m) return null;
+  if (!m || m[1] === undefined) return null;
   try {
     return yamlParse(m[1]);
   } catch {

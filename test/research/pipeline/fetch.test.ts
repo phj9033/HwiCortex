@@ -7,6 +7,8 @@ import { join } from "path";
 import { fetchTopic } from "../../../src/research/pipeline/fetch.js";
 import { parseTopic } from "../../../src/research/topic/schema.js";
 import { _resetRobotsCacheForTests } from "../../../src/research/core/robots.js";
+import { mockLlm } from "../_helpers/anthropic-mock.js";
+import { readCardFrontmatter, cardPath } from "../../../src/research/store/cards.js";
 
 const longBody = "lorem ipsum ".repeat(100);
 const HTML = `<html><head><title>T</title></head><body><article><h1>Title</h1><p>${longBody}</p></article></body></html>`;
@@ -57,7 +59,7 @@ describe("fetchTopic (slice 1)", () => {
       title: "t1",
       sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
     });
-    const r = await fetchTopic({ topic, vault, config: cfg });
+    const r = await fetchTopic({ topic, vault, config: cfg, cardsEnabled: false });
     expect(r.records_added).toBe(1);
     expect(r.fetched).toBe(1);
     const raw = readFileSync(
@@ -73,8 +75,8 @@ describe("fetchTopic (slice 1)", () => {
       title: "t1",
       sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
     });
-    await fetchTopic({ topic, vault, config: cfg });
-    const r = await fetchTopic({ topic, vault, config: cfg });
+    await fetchTopic({ topic, vault, config: cfg, cardsEnabled: false });
+    const r = await fetchTopic({ topic, vault, config: cfg, cardsEnabled: false });
     expect(r.records_added).toBe(0);
     expect(r.skipped).toBe(1);
   });
@@ -85,7 +87,7 @@ describe("fetchTopic (slice 1)", () => {
       title: "t1",
       sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
     });
-    const r = await fetchTopic({ topic, vault, config: cfg, dryRun: true });
+    const r = await fetchTopic({ topic, vault, config: cfg, dryRun: true, cardsEnabled: false });
     expect(r.records_added).toBe(0);
     expect(r.fetched).toBe(1);
   });
@@ -96,8 +98,41 @@ describe("fetchTopic (slice 1)", () => {
       title: "t1",
       sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
     });
-    const r = await fetchTopic({ topic, vault, config: cfg, maxNew: 0 });
+    const r = await fetchTopic({ topic, vault, config: cfg, maxNew: 0, cardsEnabled: false });
     expect(r.records_added).toBe(0);
     expect(r.fetched).toBe(0);
+  });
+
+  it("writes a card via mock LLM and is idempotent on rerun", async () => {
+    const topic = parseTopic({
+      id: "t-card",
+      title: "x",
+      sources: [{ type: "seed-urls", urls: ["https://e.com/a"] }],
+      cards: { enabled: true, model: "claude-haiku-4-5" },
+    });
+    const llm = mockLlm([
+      JSON.stringify({
+        tldr: ["alpha bullet", "beta bullet", "gamma bullet"],
+        excerpts: [],
+        tags: ["rag"],
+      }),
+    ]);
+    const r1 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
+    expect(r1.records_added).toBe(1);
+    expect(r1.budget.cost_usd_total).toBeGreaterThan(0);
+
+    // Resolve actual source_id from staging, then verify card frontmatter body_hash matches
+    const raw = readFileSync(
+      join(vault, "research", "_staging", "t-card", "raw.jsonl"),
+      "utf-8",
+    );
+    const recObj = JSON.parse(raw.trim().split("\n")[0]);
+    const fm = readCardFrontmatter(cardPath(vault, "t-card", recObj.id));
+    expect(fm?.body_hash).toBe(recObj.body_hash);
+
+    // Second run: URL is already staged, so no new records and no LLM call
+    const r2 = await fetchTopic({ topic, vault, config: cfg, _llmClient: llm });
+    expect(r2.records_added).toBe(0);
+    expect(r2.skipped).toBe(1);
   });
 });
