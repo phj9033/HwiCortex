@@ -80,6 +80,7 @@ import {
   type ReindexResult,
   type ChunkStrategy,
   getKoreanTokenizerState,
+  setKoreanTokenizerState,
   upsertFTS,
   getDocumentId,
 } from "../store.js";
@@ -1675,6 +1676,13 @@ async function indexFiles(pwd?: string, globPattern: string = DEFAULT_GLOB, coll
 
   // Clean up orphaned content hashes (content not referenced by any document)
   const orphanedContent = cleanupOrphanedContent(db);
+
+  // Sync the Korean tokenizer flag to reflect the tokenizer that was active
+  // during this indexing pass. Why: upsertFTS() above already routes Korean
+  // text through tokenizeKorean(), but the store_config flag only updated on
+  // store creation / `rebuild`, leaving status output stale ("built with none")
+  // even when mecab was actually applied.
+  setKoreanTokenizerState(db);
 
   // Check if vector index needs updating
   const needsEmbedding = getHashesNeedingEmbedding(db);
